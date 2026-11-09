@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- BuildKit: shared setup code for Mutagen plugin builders (see README.md). Use the NuGet package
+       Taosecurity.Starfield.BuildKit, or reference this project with
+       <ProjectReference Include="..\BuildKit\BuildKit.csproj" />. -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>BuildKit</RootNamespace>
+    <AssemblyName>BuildKit</AssemblyName>
+    <!-- Lock transitive dependency versions so restores are reproducible. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <!-- The package ID is set only when packing (dotnet pack -p:BuildKitPackage=true; the release workflow does this).
+       Set always, it would rename BuildKit's entry in the lock file of every builder that references this project. -->
+  <PropertyGroup Condition="'$(BuildKitPackage)' == 'true'">
+    <PackageId>Taosecurity.Starfield.BuildKit</PackageId>
+  </PropertyGroup>
+
+  <PropertyGroup Label="NuGet package">
+    <Version>0.1.0</Version>
+    <Authors>Richard Bejtlich</Authors>
+    <Description>Shared setup code for Starfield plugin builders on Mutagen 0.54.4: masters opened with the right light/medium flags, ONAM written like the Creation Kit, EFIF/MUID on effects, FormIDs locked between builds, a "Show Debug Messages" Gameplay Option, and one-thread writing so the same build gives the same bytes.</Description>
+    <PackageTags>starfield;mutagen;modding;bethesda;esm;plugin</PackageTags>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/taosecurity/BuildKit</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/taosecurity/BuildKit</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <!-- Release builds on GitHub Actions: deterministic paths and Source Link to the public repo. -->
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Exact pin: BuildKit's fixes target Mutagen 0.54.4's known gaps. A new Mutagen release gets a new BuildKit. -->
+    <PackageReference Include="Mutagen.Bethesda.Starfield" Version="[0.54.4]" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md;LICENSE;PRIVACY.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="SelfTest\**;tests\**" />
+    <None Remove="SelfTest\**;tests\**" />
+  </ItemGroup>
+
+</Project>
