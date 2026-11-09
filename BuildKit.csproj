@@ -22,7 +22,7 @@
   </PropertyGroup>
 
   <PropertyGroup Label="NuGet package">
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>Richard Bejtlich</Authors>
     <Description>Shared setup code for Starfield plugin builders on Mutagen 0.54.4: masters opened with the right light/medium flags, ONAM written like the Creation Kit, EFIF/MUID on effects, FormIDs locked between builds, a "Show Debug Messages" Gameplay Option, and one-thread writing so the same build gives the same bytes.</Description>
     <PackageTags>starfield;mutagen;modding;bethesda;esm;plugin</PackageTags>
