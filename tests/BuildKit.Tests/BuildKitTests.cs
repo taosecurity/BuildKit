@@ -349,3 +349,87 @@ public class PluginWriterTests
     public void TryFindToolGivesNullForAMissingFile() =>
         Assert.Null(PluginWriter.TryFindTool("no-such-buildkit-helper-7f3a.py"));
 }
+
+public class RecordsTests
+{
+    static byte[] WriteAndRead(StarfieldMod mod, TempDir tmp)
+    {
+        using var game = new GameData(tmp.Path);
+        return File.ReadAllBytes(PluginWriter.Write(mod, tmp.Sub("out"), game, Fixtures.NoGapCheck));
+    }
+
+    // Starfield keeps dialogue topics inside their quest.
+    static DialogTopic Topic(StarfieldMod mod, string editorId, DialogTopic.SubtypeEnum subtype = DialogTopic.SubtypeEnum.Custom)
+    {
+        var q = mod.Quests.FirstOrDefault() ?? Quests.New(mod, "DT_Quest");
+        var t = new DialogTopic(mod.GetNextFormKey(), StarfieldRelease.Starfield) { EditorID = editorId, Subtype = subtype };
+        q.DialogTopics.Add(t);
+        return t;
+    }
+
+    static bool Has(byte[] bytes, string tag) => bytes.AsSpan().IndexOf(System.Text.Encoding.ASCII.GetBytes(tag)) >= 0;
+
+    [Fact]
+    public void NewQuestIsWrittenWithNextAndAnam()
+    {
+        using var tmp = new TempDir();
+        var mod = Plugin.New("Quests.esm", PluginStyle.Light, "test", "test");
+        var q = Quests.New(mod, "QT_Quest");
+        Assert.Equal(Plugin.CkFormVersion, q.FormVersion);
+        var bytes = WriteAndRead(mod, tmp);
+        Assert.True(Has(bytes, "NEXT"));
+        Assert.True(Has(bytes, "ANAM"));
+    }
+
+    [Fact]
+    public void PlainAddNewQuestLacksNextAndAnam()  // the Mutagen 0.54.4 behaviour Quests.New works around
+    {
+        using var tmp = new TempDir();
+        var mod = Plugin.New("Quests.esm", PluginStyle.Light, "test", "test");
+        mod.Quests.AddNew("QT_Quest");
+        var bytes = WriteAndRead(mod, tmp);
+        Assert.False(Has(bytes, "NEXT"));
+        Assert.False(Has(bytes, "ANAM"));
+    }
+
+    [Fact]
+    public void FixedKeyQuestUsesTheKey()
+    {
+        var mod = Plugin.New("Quests.esm", PluginStyle.Light, "test", "test");
+        var key = new FormKey(mod.ModKey, 0x9AB);
+        var q = Quests.New(mod, "QT_Quest", key);
+        Assert.Equal(key, q.FormKey);
+        Assert.Same(q, mod.Quests.Single());
+        Assert.Equal("QT_Quest", q.EditorID);
+    }
+
+    [Fact]
+    public void BlankSnamIsFilledAndASetOneIsKept()
+    {
+        var mod = Plugin.New("Topics.esm", PluginStyle.Light, "test", "test");
+        var blank = Topic(mod, "DT_Blank", DialogTopic.SubtypeEnum.Greeting);
+        var set = Topic(mod, "DT_Set", DialogTopic.SubtypeEnum.Greeting);
+        set.SubtypeName = DialogTopic.SubtypeNameEnum.Hello;   // deliberately different: must stay as the builder set it
+        var odd = Topic(mod, "DT_Odd", DialogTopic.SubtypeEnum.ShootBow);
+        Assert.Equal((1, 1), DialogTopics.FixSubtypeNames(mod));
+        Assert.Equal(DialogTopic.SubtypeNameEnum.Greeting, blank.SubtypeName);
+        Assert.Equal(DialogTopic.SubtypeNameEnum.Hello, set.SubtypeName);
+        Assert.Equal((DialogTopic.SubtypeNameEnum)0, odd.SubtypeName);
+        Assert.Equal((0, 1), DialogTopics.FixSubtypeNames(mod));
+    }
+
+    [Fact]
+    public void WriterFillsSnamUnlessTurnedOff()
+    {
+        using var tmp = new TempDir();
+        using var game = new GameData(tmp.Path);
+        var mod = Plugin.New("Topics.esm", PluginStyle.Light, "test", "test");
+        var t = Topic(mod, "DT_Custom");   // Subtype Custom = 0, SNAM code CUST
+        PluginWriter.Write(mod, tmp.Sub("off"), game, new WriteOptions { GapCheck = false, FixDialogSubtypes = false });
+        Assert.Equal((DialogTopic.SubtypeNameEnum)0, t.SubtypeName);
+        var path = PluginWriter.Write(mod, tmp.Sub("on"), game, Fixtures.NoGapCheck);
+        Assert.Equal(DialogTopic.SubtypeNameEnum.Custom, t.SubtypeName);
+        using var back = game.OpenPlugin(path);
+        Assert.Equal(DialogTopic.SubtypeNameEnum.Custom, back.Quests.Single().DialogTopics.Single().SubtypeName);
+    }
+}

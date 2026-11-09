@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `Quests.New`: a quest written with NEXT and ANAM, as the Creation Kit writes every quest.
+- `DialogTopics.FixSubtypeNames`: fills a blank SNAM on dialogue topics from their Subtype. `PluginWriter.Write`
+  runs it by default (new write option `FixDialogSubtypes`); topics that already have an SNAM are left alone.
+
 ## 0.1.0 (2026-11-09)
 
 First public release. Built on Mutagen.Bethesda.Starfield 0.54.4.

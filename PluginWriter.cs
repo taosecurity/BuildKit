@@ -1,4 +1,4 @@
-// Writes a plugin the way a Starfield builder should: EFIF/MUID filled on every effect, ONAM filled like the Creation
+// Writes a plugin the way a Starfield builder should: EFIF/MUID filled on every effect, SNAM on every dialogue topic, ONAM filled like the Creation
 // Kit (OverriddenFormsOption.Iterate; Mutagen 0.54.4 defaults to none, and the game then ignores edits of vanilla
 // temporary references), master flags from the open masters, masters listed in load order, one-thread writing, and
 // then (when the script is present) the Mutagen gap check on the written file.
@@ -31,6 +31,9 @@ public sealed class WriteOptions
     public bool Deterministic { get; init; } = true;
     /// <summary>Fill EFIF/MUID on every effect entry before writing (Effects.FixAll).</summary>
     public bool FixEffects { get; init; } = true;
+    /// <summary>Fill a blank SubtypeName (SNAM) on every dialogue topic from its Subtype before writing
+    /// (DialogTopics.FixSubtypeNames).</summary>
+    public bool FixDialogSubtypes { get; init; } = true;
     /// <summary>Run mutagen-gap-check.py on the written plugin when the script can be found (GapCheckScript, else
     /// BUILDKIT_TOOLS, else a "tools" folder above the builder). If it can't be found, one line says it was skipped.</summary>
     public bool GapCheck { get; init; } = true;
@@ -55,6 +58,12 @@ public static class PluginWriter
         {
             var fixedCount = Effects.FixAll(mod);
             if (fixedCount > 0) Console.WriteLine($"  BuildKit: EFIF/MUID filled on {fixedCount} effect entries");
+        }
+        if (options.FixDialogSubtypes)
+        {
+            var (fixedTopics, unmatched) = DialogTopics.FixSubtypeNames(mod);
+            if (fixedTopics > 0) Console.WriteLine($"  BuildKit: SNAM filled on {fixedTopics} dialogue topics");
+            if (unmatched > 0) Console.WriteLine($"  BuildKit: {unmatched} dialogue topics keep a blank SNAM (no code matches their subtype)");
         }
         var masterOrder = options.MasterOrder;
         var mastersContent = options.MastersListContent;

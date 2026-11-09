@@ -46,6 +46,8 @@ PluginWriter.Write(mod, "out", game);                    // writes out\MyMod.esm
 | `Plugin` | `Plugin.New(fileName, style, author, description, localized)` makes a master plugin with the Creation Kit's header (Master plus Light or Medium flag, form version 582). `IdRange(style)` gives the FormIDs a style may use. |
 | `PluginWriter` | `Write(mod, outDir, game, options)` fills effect data, writes ONAM like the Creation Kit, takes master flags from the open masters, lists masters in load order and writes on one thread, so the same build gives the same bytes. See the options below. |
 | `Effects` | `New(baseEffect, magnitude, area, duration)` makes an effect entry. `Fix(list)` and `FixAll(mod)` fill a missing EFIF (0) and MUID (position + 1, never a duplicate). Without them, effects on spells, enchantments and ingestibles never apply in game. |
+| `Quests` | `New(mod, editorId)` makes a quest with empty (not missing) condition and alias lists, so it's written with NEXT and ANAM like a Creation Kit quest. A quest made with plain `AddNew` has neither. |
+| `DialogTopics` | `FixSubtypeNames(mod)` fills a blank SubtypeName (SNAM) on every dialogue topic with the code that matches its Subtype, as vanilla topics have. `PluginWriter.Write` calls it for you. |
 | `IdLock` | `Apply(mod, lockPath)` keeps every own record's FormID the same from build to build, using a JSON file of EditorID to FormID. New records get the next free ID. The build stops if a locked record disappears, if two records share an EditorID, or if a record has no EditorID. `update: false` only checks. |
 | `GameplayOptions` | `Debug(...)` makes a "Show Debug Messages" option, off by default, for Settings > Gameplay Options. `Bool(...)` makes other on/off options, and `Group(...)` makes the mod's own options group. Create the options first and the group last. |
 | `Localized` | `Text(s)` gives the same text in all nine languages the game ships, for localized plugins. |
@@ -57,6 +59,7 @@ PluginWriter.Write(mod, "out", game);                    // writes out\MyMod.esm
 | `OverriddenForms` | `Iterate` | Fill the header's ONAM list like the Creation Kit. Mutagen 0.54.4's own default writes none, and the game then ignores a plugin's edits of temporary references in its masters' cells. |
 | `Deterministic` | `true` | Write on one thread. With parallel writing, Mutagen 0.54.4 can number a localized plugin's strings differently on every run. |
 | `FixEffects` | `true` | Run `Effects.FixAll` before writing. |
+| `FixDialogSubtypes` | `true` | Run `DialogTopics.FixSubtypeNames` before writing. Topics that already have an SNAM are left alone. |
 | `MasterOrder` | open order | The order masters are listed in the header. |
 | `Masters` | none | An explicit master list, written exactly as given, even masters no record points into (for patches that list a master only to load after it). |
 | `MastersListContent` | Mutagen's | Lower-level form of `Masters`: `NoCheck` writes the header's `MasterReferences` as you filled them. |
