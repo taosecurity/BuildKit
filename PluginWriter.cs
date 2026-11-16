@@ -1,7 +1,8 @@
 // Writes a plugin the way a Starfield builder should: EFIF/MUID filled on every effect, SNAM on every dialogue topic, ONAM filled like the Creation
 // Kit (OverriddenFormsOption.Iterate; Mutagen 0.54.4 defaults to none, and the game then ignores edits of vanilla
-// temporary references), master flags from the open masters, masters listed in load order, one-thread writing, and
-// then (when the script is present) the Mutagen gap check on the written file.
+// temporary references), master flags from the open masters, masters listed in load order, one-thread writing,
+// light and medium plugins' own records in Bethesda's FE/FD FormID form, and then (when the script is present) the
+// Mutagen gap check on the written file.
 using System.Diagnostics;
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Plugins.Binary.Parameters;
@@ -43,6 +44,67 @@ public sealed class WriteOptions
     public string? GapCheckMastersDir { get; init; }
     /// <summary>Throw when the gap check reports an ERROR (its exit code 1).</summary>
     public bool FailOnGapErrors { get; init; } = true;
+    /// <summary>Write the plugin's own new records the way Bethesda's own Starfield plugins store them: a light
+    /// plugin's as FE + its index among light masters (FE000800 when it has no light masters), a medium plugin's as
+    /// FD + its index among medium masters. Off = Mutagen 0.54.4's form for non-Bethesda plugins (the count of full
+    /// masters, e.g. 01000800), which xEdit 4.1.5r reports as a HITME. Full plugins are written the same either way,
+    /// and the game loads both forms, so in-game FormIDs and saves don't change.</summary>
+    public bool BethesdaFormIds { get; init; } = true;
+    /// <summary>Set the header's INCC (Interior Cell Count) to the plugin's interior cells, as every Bethesda plugin
+    /// has it (xEdit marks it required).</summary>
+    public bool InteriorCellCount { get; init; } = true;
+    /// <summary>Fill empty fields Bethesda always writes on the plugin's own records (BethesdaFields.Fill: message
+    /// back-out index, form list add-to-list, model light layer on Aid items and activators, keyword color/FNAM,
+    /// story-manager quest node limit).</summary>
+    public bool FillBethesdaFields { get; init; } = true;
+    /// <summary>Raise own records still at Mutagen's default form version (576) to the Creation Kit's 582.</summary>
+    public bool CkFormVersion { get; init; } = true;
+    /// <summary>Compress the plugin's own NPC records, as Bethesda's are.</summary>
+    public bool CompressNpcs { get; init; } = true;
+    /// <summary>Zero the version-control words in every group header, as in Bethesda's own plugins
+    /// (BethesdaFields.ZeroGroupStamps). Matters for rebuilds that copy another author's Creation Kit groups.</summary>
+    public bool ZeroGroupStamps { get; init; } = true;
+}
+
+/// <summary>Turns on Bethesda's own-record FormID form for one plugin (see WriteOptions.BethesdaFormIds).
+/// Mutagen 0.54.4 does this only for a fixed list of Bethesda's plugins (SeparatedMasterPackage._starfieldMasters,
+/// marked "Hack until this is better understood"); every other plugin gets the full-master form. Adding the plugin
+/// to that list makes Mutagen use the plugin's own light or medium style for its new records and for references
+/// to them. It is a private field, so a Mutagen version that moves it stops here with a clear message.</summary>
+public static class BethesdaFormIds
+{
+    const string FieldName = "_starfieldMasters";
+    static readonly object Gate = new();
+    static readonly HashSet<ModKey> AddedByUs = new();
+
+    /// <summary>Use Bethesda's form for modKey in this process (writing and reading it back). Safe to call twice.</summary>
+    public static void Enable(ModKey modKey)
+    {
+        lock (Gate) { if (Set().Add(modKey)) AddedByUs.Add(modKey); }
+    }
+
+    /// <summary>Go back to Mutagen's own form for modKey. Bethesda's own plugins, which Mutagen lists itself, stay.</summary>
+    public static void Disable(ModKey modKey)
+    {
+        lock (Gate) { if (AddedByUs.Remove(modKey)) Set().Remove(modKey); }
+    }
+
+    /// <summary>True when modKey is written in Bethesda's form (Bethesda's own plugins always are).</summary>
+    public static bool IsEnabled(ModKey modKey)
+    {
+        lock (Gate) return Set().Contains(modKey);
+    }
+
+    static HashSet<ModKey> Set()
+    {
+        var field = typeof(Mutagen.Bethesda.Plugins.Masters.SeparatedMasterPackage)
+            .GetField(FieldName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        if (field?.GetValue(null) is HashSet<ModKey> set) return set;
+        throw new InvalidOperationException(
+            $"BuildKit: Mutagen's SeparatedMasterPackage.{FieldName} was not found, so Bethesda-form FormIDs can't be " +
+            "turned on with this Mutagen version (BuildKit is built for Mutagen 0.54.4). Use the Mutagen version BuildKit " +
+            "pins, or set WriteOptions.BethesdaFormIds = false.");
+    }
 }
 
 public static class PluginWriter
@@ -65,6 +127,33 @@ public static class PluginWriter
             if (fixedTopics > 0) Console.WriteLine($"  BuildKit: SNAM filled on {fixedTopics} dialogue topics");
             if (unmatched > 0) Console.WriteLine($"  BuildKit: {unmatched} dialogue topics keep a blank SNAM (no code matches their subtype)");
         }
+        if (options.FillBethesdaFields)
+        {
+            var filled = BethesdaFields.Fill(mod);
+            if (filled.Total > 0) Console.WriteLine($"  BuildKit: Bethesda fields filled: {filled}");
+        }
+        if (options.CkFormVersion)
+        {
+            var raised = BethesdaFields.RaiseFormVersions(mod);
+            if (raised > 0) Console.WriteLine($"  BuildKit: form version {Plugin.CkFormVersion} set on {raised} own records left at Mutagen's {BethesdaFields.MutagenDefaultFormVersion}");
+        }
+        if (options.CompressNpcs)
+        {
+            var compressed = BethesdaFields.CompressNpcs(mod);
+            if (compressed > 0) Console.WriteLine($"  BuildKit: {compressed} own NPC records marked compressed");
+        }
+        if (options.ZeroGroupStamps)
+        {
+            var zeroed = BethesdaFields.ZeroGroupStamps(mod);
+            if (zeroed > 0) Console.WriteLine($"  BuildKit: version-control words zeroed on {zeroed} group headers");
+        }
+        if (options.InteriorCellCount)
+        {
+            var before = mod.ModHeader.InteriorCellCount;
+            mod.ModHeader.InteriorCellCount = BethesdaFields.InteriorCells(mod);
+            if (before != mod.ModHeader.InteriorCellCount)
+                Console.WriteLine($"  BuildKit: header interior cell count (INCC) set to {mod.ModHeader.InteriorCellCount} (was {before?.ToString() ?? "unset"})");
+        }
         var masterOrder = options.MasterOrder;
         var mastersContent = options.MastersListContent;
         if (options.Masters != null)
@@ -74,6 +163,19 @@ public static class PluginWriter
             foreach (var m in masters) mod.ModHeader.MasterReferences.Add(new MasterReference { Master = m });
             masterOrder = masters;
             mastersContent = MastersListContentOption.NoCheck;
+        }
+        var style = Plugin.StyleOf(mod);
+        if (options.BethesdaFormIds)
+        {
+            BethesdaFormIds.Enable(mod.ModKey);
+            if (style != PluginStyle.Full)
+                Console.WriteLine($"  BuildKit: own records written in Bethesda's {(style == PluginStyle.Light ? "FE" : "FD")} FormID form ({style.ToString().ToLowerInvariant()} plugin)");
+        }
+        else
+        {
+            BethesdaFormIds.Disable(mod.ModKey);
+            if (style != PluginStyle.Full)
+                Console.WriteLine($"  BuildKit: own records written in Mutagen's full-master FormID form (BethesdaFormIds off)");
         }
         Directory.CreateDirectory(outDir);
         var outPath = Path.Combine(outDir, mod.ModKey.FileName);

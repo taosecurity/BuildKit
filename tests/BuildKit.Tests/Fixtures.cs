@@ -48,7 +48,11 @@ public static class Fixtures
     public static void AddInteriorCell(StarfieldMod mod, Cell cell) =>
         mod.Cells.Add(new CellBlock
         {
-            SubBlocks = new ExtendedList<CellSubBlock> { new CellSubBlock { Cells = new ExtendedList<Cell> { cell } } },
+            GroupType = GroupTypeEnum.InteriorCellBlock,   // Mutagen writes the type as set; the default (0) is wrong
+            SubBlocks = new ExtendedList<CellSubBlock>
+            {
+                new CellSubBlock { GroupType = GroupTypeEnum.InteriorCellSubBlock, Cells = new ExtendedList<Cell> { cell } },
+            },
         });
 
     public static IStarfieldModDisposableGetter Read(GameData game, string path) => game.OpenPlugin(path);

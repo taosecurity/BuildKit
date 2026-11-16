@@ -8,6 +8,8 @@ effect data Mutagen leaves out, keeping FormIDs fixed between builds, and adding
 It targets **Mutagen.Bethesda.Starfield 0.54.4** exactly. Each BuildKit release says which Mutagen version it was
 tested with; a new Mutagen release gets a new BuildKit release.
 
+For AI assistants: step-by-step instructions are in [AGENTS.md](AGENTS.md).
+
 ## Install
 
 ```
@@ -60,6 +62,12 @@ PluginWriter.Write(mod, "out", game);                    // writes out\MyMod.esm
 | `Deterministic` | `true` | Write on one thread. With parallel writing, Mutagen 0.54.4 can number a localized plugin's strings differently on every run. |
 | `FixEffects` | `true` | Run `Effects.FixAll` before writing. |
 | `FixDialogSubtypes` | `true` | Run `DialogTopics.FixSubtypeNames` before writing. Topics that already have an SNAM are left alone. |
+| `BethesdaFormIds` | `true` | Store a light or medium plugin's own new records the way Bethesda's own Starfield plugins do: `FE` plus the plugin's place among light masters (`FE000800` with no light masters), or `FD` plus its place among medium masters. Mutagen 0.54.4 does this only for Bethesda's plugins and gives every other one the full-master form (`01000800`), which xEdit's Check for Errors reports as a HITME. The game loads both, and in-game FormIDs don't change, so saves are unaffected. Full plugins are written the same either way. |
+| `InteriorCellCount` | `true` | Set the header's INCC to the number of interior cells in the plugin, as every Bethesda plugin has it (xEdit marks it required). |
+| `FillBethesdaFields` | `true` | `BethesdaFields.Fill`: on the plugin's own records only, fill empty fields Bethesda always writes, with Bethesda's usual value: message "index chosen on back out" -1, form list "add to list" null, model light layer 1 on Aid items and activators, keyword color FF FF FF 00 / type 0 / FNAM zeros, story-manager quest node "max concurrent quests" 0. Overrides and fields the builder set are left alone. |
+| `CkFormVersion` | `true` | Own records still at Mutagen 0.54.4's default form version (576) get the Creation Kit's 582. |
+| `CompressNpcs` | `true` | Own NPC records are written compressed, as all of Bethesda's are. |
+| `ZeroGroupStamps` | `true` | `BethesdaFields.ZeroGroupStamps`: the two version-control words in every group header are written as zero, as in all of Bethesda's own plugins. A Creation Kit save stamps them, and Mutagen keeps those stamps when a builder copies records or groups from such a plugin. The game doesn't use them. |
 | `MasterOrder` | open order | The order masters are listed in the header. |
 | `Masters` | none | An explicit master list, written exactly as given, even masters no record points into (for patches that list a master only to load after it). |
 | `MastersListContent` | Mutagen's | Lower-level form of `Masters`: `NoCheck` writes the header's `MasterReferences` as you filled them. |
@@ -75,6 +83,16 @@ The gap check is an optional Python script that compares a written plugin with i
 0.54.4 is known to lose on write, plus missing ONAM entries. It isn't part of this package. BuildKit runs it when it
 finds `mutagen-gap-check.py` (from `WriteOptions.GapCheckScript`, the `BUILDKIT_TOOLS` environment variable, or a
 `tools` folder above the builder); otherwise it prints one "skipped" line and carries on.
+
+## What BuildKit prints
+
+BuildKit writes what it changed to standard output, one line per decision, each starting `  BuildKit:` (for example
+EFIF/MUID filled, Bethesda fields filled, group headers zeroed) or `  gap check:`. A problem it can't fix is thrown as
+an exception whose message names the file or records involved. To keep a log of a build, redirect your
+builder's output: `dotnet run > build.log 2>&1`.
+
+Write one plugin at a time: the `BethesdaFormIds` switch lives in a setting Mutagen shares across the process, so
+don't call `PluginWriter.Write` from several threads at once.
 
 ## Same bytes every build
 

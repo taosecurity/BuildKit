@@ -1,0 +1,74 @@
+# BuildKit: instructions for AI assistants
+
+Plain steps for a model helping someone build a Starfield plugin with BuildKit. Human readers: see [README.md](README.md).
+
+## 1. What it is and when to use it
+
+BuildKit is a C# library (NuGet package `Taosecurity.Starfield.BuildKit`) for programs that write Starfield plugins
+(`.esm`) with Mutagen. Use it when you write or maintain a Mutagen builder for Starfield: it opens masters with the
+right flags, writes the plugin the way Bethesda and the Creation Kit do (ONAM, EFIF/MUID, SNAM, Bethesda-style FE/FD
+FormIDs and fields), keeps FormIDs fixed between builds and adds a "Show Debug Messages" Gameplay Option.
+
+Don't use it for: editing a plugin by hand (use xEdit or the Creation Kit), other games, or any Mutagen version other
+than 0.54.4.
+
+## 2. Prerequisites
+
+1. .NET SDK 9 or later (`dotnet --version` prints 9.x or higher; checked with 10.0.404).
+2. Mutagen.Bethesda.Starfield 0.54.4 exactly. The package brings it in; don't add another version.
+3. A Starfield install, only for builders that read the game's masters. The tests need no game files.
+
+## 3. Install
+
+In a new or existing .NET 9 (or later) console project:
+
+```
+dotnet new console -n MyBuilder
+cd MyBuilder
+dotnet add package Taosecurity.Starfield.BuildKit --version 0.3.0
+```
+
+## 4. Prove the install works
+
+Replace `Program.cs` with:
+
+```csharp
+using BuildKit;
+var mod = Plugin.New("MyMod.esm", PluginStyle.Light, "Your Name", "My Mod 0.1.0");
+var dbg = GameplayOptions.Debug(mod, "MM_Option_Debug", "My Mod's log lines on screen");
+GameplayOptions.Group(mod, "MM_Options", "My Mod", [dbg]);
+using var game = new GameData(Directory.CreateDirectory("data").FullName);   // an empty Data folder is enough here
+PluginWriter.Write(mod, "out", game);
+Console.WriteLine(File.Exists(Path.Combine("out", "MyMod.esm")) ? "OK" : "FAILED");
+```
+
+Then run `dotnet run`. It prints a "gap check: skipped" line (plus any `BuildKit:` lines) and `OK`; `out\MyMod.esm`
+exists. No game files are needed for this; a real builder points `GameData` at the game's Data folder.
+
+## 5. Common tasks
+
+1. Open masters by EditorID: `using var game = new GameData(@"<Starfield>\Data"); game.Open("Starfield.esm");`
+   then `game.Get<IKeywordGetter>("SomeEditorID")`. Pass `game` to `PluginWriter.Write(mod, "out", game)`.
+2. Keep FormIDs the same between builds: `Console.WriteLine(IdLock.Apply(mod, "ids.lock.json"));` before writing,
+   and commit `ids.lock.json` with the builder.
+3. Turn a write option off: `PluginWriter.Write(mod, "out", game, new WriteOptions { BethesdaFormIds = false });`
+   The options and their defaults are in README.md, "Write options".
+4. Run the library's tests from a clone of the repo: `dotnet test tests/BuildKit.Tests`.
+
+## 6. Inputs, outputs, exit codes, log
+
+- Inputs: the `mod` your builder made; masters read from the Data folder you give `GameData`.
+- Output: `<out>\<ModName>.esm`. Nothing else is written, apart from `ids.lock.json` when you call `IdLock.Apply`.
+- Exit codes: BuildKit is a library and never exits the process. Problems are exceptions whose message names the
+  file or records involved; let them reach your `Main` so the builder exits non-zero.
+- Log: BuildKit writes its decisions to standard output, one line each, starting `  BuildKit:` (fields filled,
+  FormIDs changed, group headers zeroed) or `  gap check:`. To keep a log, redirect it:
+  `dotnet run > build.log 2>&1`.
+
+## 7. Limits
+
+- Never changes or deletes game files or masters; it only reads them.
+- Makes no network calls and uploads nothing (PRIVACY.md).
+- Writes only the plugin you ask for. It doesn't pack BA2 archives, compile Papyrus or make zips.
+- Mutagen 0.54.4 only. A newer Mutagen needs a new BuildKit release.
+- Call `PluginWriter.Write` from one thread at a time; don't write several plugins in parallel in one process.
