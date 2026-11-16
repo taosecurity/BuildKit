@@ -82,7 +82,16 @@ PluginWriter.Write(mod, "out", game);                    // writes out\MyMod.esm
 The gap check is an optional Python script that compares a written plugin with its masters and reports data Mutagen
 0.54.4 is known to lose on write, plus missing ONAM entries. It isn't part of this package. BuildKit runs it when it
 finds `mutagen-gap-check.py` (from `WriteOptions.GapCheckScript`, the `BUILDKIT_TOOLS` environment variable, or a
-`tools` folder above the builder); otherwise it prints one "skipped" line and carries on.
+`tools` folder above the builder or the current folder, never a drive-root `C:\tools`); otherwise it prints one
+"skipped" line and carries on. Before it runs, it prints the script and the Python it uses (Python is found on PATH
+by full path, so a `python.exe` in the current folder is never picked).
+
+### Master names
+
+A plugin lists its masters by file name. `GameData` refuses a plugin whose master list holds anything other than a
+plain name such as `Starfield.esm` (a folder, a drive, a network path like `\\server\share\x.esm`, or `..`), with an
+`InvalidDataException` naming the plugin. Without this check, opening a crafted mod could make Windows contact
+another computer. `GameData.IsPlainPluginName` is public for builders that read master names themselves.
 
 ## What BuildKit prints
 

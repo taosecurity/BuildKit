@@ -214,7 +214,9 @@ public static class PluginWriter
     public static int GapCheck(string pluginPath, string dataDir, string? mastersDir = null, string? script = null)
     {
         script ??= FindTool(GapCheckScriptName);
-        var psi = new ProcessStartInfo("python") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+        var python = FindPython();
+        Console.WriteLine($"  gap check: running {script} with {python}");
+        var psi = new ProcessStartInfo(python) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var a in new[] { "-I", script, Path.GetFullPath(pluginPath), "--data", dataDir }) psi.ArgumentList.Add(a);
         if (mastersDir != null) { psi.ArgumentList.Add("--masters-dir"); psi.ArgumentList.Add(mastersDir); }
         using var p = Process.Start(psi) ?? throw new Exception("could not start python");
@@ -226,14 +228,33 @@ public static class PluginWriter
         return p.ExitCode;
     }
 
+    /// <summary>The full path of the Python to run: the first python.exe (Windows) or python3/python (Linux) on PATH.
+    /// Searching PATH ourselves keeps a python.exe in the current folder or the builder's folder from being picked
+    /// first, as Windows would for a bare name. Falls back to the bare name when none is found.</summary>
+    public static string FindPython()
+    {
+        var names = OperatingSystem.IsWindows() ? new[] { "python.exe" } : new[] { "python3", "python" };
+        foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!Path.IsPathFullyQualified(dir)) continue;   // a relative PATH entry would mean the current folder
+            foreach (var n in names)
+            {
+                var p = Path.Combine(dir, n);
+                if (File.Exists(p)) return p;
+            }
+        }
+        return OperatingSystem.IsWindows() ? "python" : "python3";
+    }
+
     /// <summary>Finds a helper file: in BUILDKIT_TOOLS if set, else in the first "tools" folder holding it above the
-    /// running builder or the current folder. Null if it's in neither.</summary>
+    /// running builder or the current folder, stopping below the drive root (any user can create C:\tools, so a
+    /// drive-root tools folder is never trusted). Null if it's in neither.</summary>
     public static string? TryFindTool(string name)
     {
         var env = Environment.GetEnvironmentVariable("BUILDKIT_TOOLS");
         if (!string.IsNullOrEmpty(env) && File.Exists(Path.Combine(env, name))) return Path.Combine(env, name);
         foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
-            for (var d = new DirectoryInfo(start); d != null; d = d.Parent)
+            for (var d = new DirectoryInfo(start); d?.Parent != null; d = d.Parent)
             {
                 var candidate = Path.Combine(d.FullName, "tools", name);
                 if (File.Exists(candidate)) return candidate;

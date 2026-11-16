@@ -35,8 +35,30 @@ public sealed class GameData : IDisposable
     }
 
     /// <summary>Where a plugin file is: the first extra folder that has it, else the Data folder; null if neither.</summary>
-    public string? Locate(string fileName) =>
-        ExtraDirs.Append(DataDir).Select(d => Path.Combine(d, fileName)).FirstOrDefault(File.Exists);
+    /// Throws ArgumentException when the name isn't a plain plugin file name (see <see cref="IsPlainPluginName"/>).
+    public string? Locate(string fileName)
+    {
+        if (!IsPlainPluginName(fileName))
+            throw new ArgumentException($"\"{Printable(fileName)}\" is not a plain plugin file name (Name.esm, .esp or .esl, no folder)", nameof(fileName));
+        return ExtraDirs.Append(DataDir).Select(d => Path.Combine(d, fileName)).FirstOrDefault(File.Exists);
+    }
+
+    /// <summary>True for a bare plugin file name such as <c>Starfield.esm</c>: no folder, drive, network path or "..",
+    /// no characters Windows forbids in file names, and the extension .esm, .esp or .esl. Master names come from the
+    /// plugin file itself, so a name like <c>\\server\share\x.esm</c> would otherwise make Windows contact that server.</summary>
+    public static bool IsPlainPluginName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Length > 255) return false;
+        if (name.IndexOfAny(['/', '\\', ':']) >= 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return false;
+        if (name.Any(char.IsControl) || name.StartsWith('.') || name.EndsWith(' ') || name.EndsWith('.')) return false;
+        var ext = Path.GetExtension(name);
+        return ext.Equals(".esm", StringComparison.OrdinalIgnoreCase) || ext.Equals(".esp", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".esl", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A name with control characters shown as \xNN, safe to print to a terminal.</summary>
+    public static string Printable(string s) =>
+        string.Concat(s.Select(c => char.IsControl(c) ? $"\\x{(int)c:X2}" : c.ToString()));
 
     /// <summary>Opens a plugin from the Data folder (read-only overlay). Its own masters are opened first.</summary>
     public IStarfieldModGetter Open(string fileName) =>
@@ -99,8 +121,19 @@ public sealed class GameData : IDisposable
             ? r as T ?? throw new Exception($"{editorId} is a {r.GetType().Name}, not {typeof(T).Name}")
             : throw new Exception($"no record {editorId} in {string.Join(" or ", order.Select(m => m.ModKey.FileName))}");
 
-    /// <summary>The master file names (MAST) listed in a plugin's header, read directly from the file.</summary>
+    /// <summary>The master file names (MAST) listed in a plugin's header, read directly from the file. Throws
+    /// InvalidDataException when a master name isn't a plain plugin file name (<see cref="IsPlainPluginName"/>).</summary>
     public static List<string> HeaderMasters(string path)
+    {
+        var list = HeaderMastersRaw(path);
+        foreach (var m in list)
+            if (!IsPlainPluginName(m))
+                throw new InvalidDataException($"{path} lists a master \"{Printable(m)}\" that is not a plain plugin file name " +
+                    "(Name.esm, .esp or .esl with no folder, drive or network path). The plugin is damaged or unsafe; don't load it.");
+        return list;
+    }
+
+    static List<string> HeaderMastersRaw(string path)
     {
         using var s = File.OpenRead(path);
         var br = new BinaryReader(s);

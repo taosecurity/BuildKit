@@ -348,6 +348,81 @@ public class PluginWriterTests
     [Fact]
     public void TryFindToolGivesNullForAMissingFile() =>
         Assert.Null(PluginWriter.TryFindTool("no-such-buildkit-helper-7f3a.py"));
+
+    [Fact]
+    public void FindPythonGivesAFullPathOrTheBareName()
+    {
+        var p = PluginWriter.FindPython();
+        Assert.True(Path.IsPathFullyQualified(p) || p is "python" or "python3");
+    }
+}
+
+public class MasterNameTests
+{
+    /// A minimal TES4 header with the given MAST names (enough for HeaderMasters).
+    internal static void WriteHeader(string path, params string[] masters)
+    {
+        var body = new MemoryStream();
+        var bw = new BinaryWriter(body);
+        foreach (var m in masters)
+        {
+            var bytes = System.Text.Encoding.UTF8.GetBytes(m + "\0");
+            bw.Write("MAST"u8.ToArray()); bw.Write((ushort)bytes.Length); bw.Write(bytes);
+        }
+        using var f = new BinaryWriter(File.Create(path));
+        f.Write("TES4"u8.ToArray()); f.Write((uint)body.Length); f.Write(new byte[16]); f.Write(body.ToArray());
+    }
+
+    [Theory]
+    [InlineData("Starfield.esm", true)]
+    [InlineData("My Mod-Patch.ESP", true)]
+    [InlineData("Light.esl", true)]
+    [InlineData(@"\\attacker.example\s\x.esm", false)]
+    [InlineData("//attacker.example/s/x.esm", false)]
+    [InlineData(@"..\..\x.esm", false)]
+    [InlineData(@"C:\Games\x.esm", false)]
+    [InlineData("C:x.esm", false)]
+    [InlineData("x.txt", false)]
+    [InlineData("", false)]
+    [InlineData("bad\u001b[2Jname.esm", false)]
+    public void PlainNames(string name, bool ok) => Assert.Equal(ok, GameData.IsPlainPluginName(name));
+
+    [Fact]
+    public void HeaderMastersRefusesANetworkPath()
+    {
+        using var t = new TempDir();
+        var p = Path.Combine(t.Path, "Evil.esm");
+        WriteHeader(p, "Starfield.esm", @"\\attacker.example\s\x.esm");
+        var e = Assert.Throws<InvalidDataException>(() => GameData.HeaderMasters(p));
+        Assert.Contains("not a plain plugin file name", e.Message);
+    }
+
+    [Fact]
+    public void HeaderMastersKeepsPlainNames()
+    {
+        using var t = new TempDir();
+        var p = Path.Combine(t.Path, "Ok.esm");
+        WriteHeader(p, "Starfield.esm", "Base.esm");
+        Assert.Equal(["Starfield.esm", "Base.esm"], GameData.HeaderMasters(p));
+    }
+
+    [Fact]
+    public void LocateRefusesAPath()
+    {
+        using var t = new TempDir();
+        using var game = new GameData(t.Path);
+        Assert.Throws<ArgumentException>(() => game.Locate(@"..\x.esm"));
+        Assert.Null(game.Locate("Missing.esm"));
+    }
+
+    [Fact]
+    public void OpenRefusesAPluginWithANetworkMaster()
+    {
+        using var t = new TempDir();
+        WriteHeader(Path.Combine(t.Path, "Evil.esm"), @"\\attacker.example\s\x.esm");
+        using var game = new GameData(t.Path);
+        Assert.Throws<InvalidDataException>(() => game.TryOpen("Evil.esm"));
+    }
 }
 
 public class RecordsTests

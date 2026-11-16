@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.1 (2026-11-16)
+
+Security fixes. Plugins built with 0.3.0 are unchanged.
+
+- `GameData` refuses master names that aren't plain plugin file names. `HeaderMasters` (and so `Open`/`TryOpen`)
+  throws `InvalidDataException` when a plugin lists a master such as `\\server\share\x.esm`, `..\x.esm` or
+  `C:\x.esm`; `Locate` throws `ArgumentException` for such a name. Before this, opening a crafted plugin could make
+  Windows contact another computer and send the user's login hash. New `GameData.IsPlainPluginName` and
+  `GameData.Printable`.
+- The gap check's script search stops below the drive root, so a `C:\tools` or `D:\tools` folder another account
+  created is never run. Python is started by its full path from PATH (`PluginWriter.FindPython`), and the script and
+  Python paths are printed before it runs.
+
 ## 0.3.0 (2026-11-16)
 
 Built on Mutagen.Bethesda.Starfield 0.54.4. Tested in game with a light plugin built on it (FE FormIDs and the
