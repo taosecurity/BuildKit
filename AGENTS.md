@@ -44,19 +44,22 @@ Console.WriteLine(File.Exists(Path.Combine("out", "MyMod.esm")) ? "OK" : "FAILED
 ```
 
 Then run `dotnet run`. It prints a "gap check: skipped" line (plus any `BuildKit:` lines) and `OK`; `out\MyMod.esm`
-exists. No game files are needed for this; a real builder points `GameData` at the game's Data folder.
+exists. The "gap check: skipped" line is expected and harmless: the optional gap check needs a Python script that
+isn't part of the package, and the plugin is written either way. No game files are needed for this; a real builder points `GameData` at the game's Data folder.
 
 ## 5. Common tasks
 
 1. Open masters by EditorID: `using var game = new GameData(@"<Starfield>\Data"); game.Open("Starfield.esm");`
    then `game.Get<IKeywordGetter>("SomeEditorID")`. Pass `game` to `PluginWriter.Write(mod, "out", game)`.
 2. Keep FormIDs the same between builds: `Console.WriteLine(IdLock.Apply(mod, "ids.lock.json"));` before writing,
-   and commit `ids.lock.json` with the builder.
+   and commit `ids.lock.json` with the builder. The first run creates the file; `Apply` returns a one-line summary
+   ("ID lock: 4 records, 4 new, ...") for you to print.
 3. Turn a write option off: `PluginWriter.Write(mod, "out", game, new WriteOptions { BethesdaFormIds = false });`
    The options and their defaults are in README.md, "Write options".
 4. Run the library's tests from a clone of the repo: `dotnet test tests/BuildKit.Tests`.
-5. On-screen text that also works on Xbox and PlayStation: `Messages.Hud(mod, "MM_Msg_X", "Text %.0f", 3)` or
-   `Messages.Box(mod, "MM_Msg_Y", "Text")`, shown in Papyrus with `Message.Show()`. Never use `Debug.Notification`
+5. On-screen text that also works on Xbox and PlayStation: `Messages.Hud(mod, "MM_Msg_X", "Text %.0f", 3)` (3 = seconds
+   on screen) or `Messages.Box(mod, "MM_Msg_Y", "Text")`, shown in Papyrus with `Message.Show()`. The number for the
+   `%.0f` slot is passed to `Show()` in Papyrus, not here. Never use `Debug.Notification`
    or `Debug.MessageBox` for text the player must see: the Debug script does nothing on consoles. Don't put a
    literal `%` in message text (it starts a number slot; write "percent"). README.md, "On-screen text that works on
    Xbox and PlayStation", has the Papyrus side.
@@ -67,10 +70,12 @@ exists. No game files are needed for this; a real builder points `GameData` at t
 
 - Inputs: the `mod` your builder made; masters read from the Data folder you give `GameData`.
 - Output: `<out>\<ModName>.esm`. Nothing else is written, apart from `ids.lock.json` when you call `IdLock.Apply`.
+  (The proof program in step 4 also makes an empty `data` folder itself.)
 - Exit codes: BuildKit is a library and never exits the process. Problems are exceptions whose message names the
   file or records involved; let them reach your `Main` so the builder exits non-zero.
 - Log: BuildKit writes its decisions to standard output, one line each, starting `  BuildKit:` (fields filled,
-  FormIDs changed, group headers zeroed) or `  gap check:`. To keep a log, redirect it:
+  FormIDs changed, group headers zeroed) or `  gap check:`. The `ID lock:` line is the summary your own program
+  prints from `IdLock.Apply`. To keep a log, redirect it:
   `dotnet run > build.log 2>&1`.
 
 ## 7. Limits
