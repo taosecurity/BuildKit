@@ -7,7 +7,8 @@ Plain steps for a model helping someone build a Starfield plugin with BuildKit. 
 BuildKit is a C# library (NuGet package `Taosecurity.Starfield.BuildKit`) for programs that write Starfield plugins
 (`.esm`) with Mutagen. Use it when you write or maintain a Mutagen builder for Starfield: it opens masters with the
 right flags, writes the plugin the way Bethesda and the Creation Kit do (ONAM, EFIF/MUID, SNAM, Bethesda-style FE/FD
-FormIDs and fields), keeps FormIDs fixed between builds and adds a "Show Debug Messages" Gameplay Option.
+FormIDs and fields), keeps FormIDs fixed between builds, adds a "Show Debug Messages (PC only)" Gameplay Option and makes Message
+records for on-screen text that also works on Xbox and PlayStation.
 
 Don't use it for: editing a plugin by hand (use xEdit or the Creation Kit), other games, or any Mutagen version other
 than 0.54.4.
@@ -25,7 +26,7 @@ In a new or existing .NET 9 (or later) console project:
 ```
 dotnet new console -n MyBuilder
 cd MyBuilder
-dotnet add package Taosecurity.Starfield.BuildKit --version 0.3.0
+dotnet add package Taosecurity.Starfield.BuildKit --version 0.4.0
 ```
 
 ## 4. Prove the install works
@@ -54,6 +55,10 @@ exists. No game files are needed for this; a real builder points `GameData` at t
 3. Turn a write option off: `PluginWriter.Write(mod, "out", game, new WriteOptions { BethesdaFormIds = false });`
    The options and their defaults are in README.md, "Write options".
 4. Run the library's tests from a clone of the repo: `dotnet test tests/BuildKit.Tests`.
+5. On-screen text that also works on Xbox and PlayStation: `Messages.Hud(mod, "MM_Msg_X", "Text %.0f", 3)` or
+   `Messages.Box(mod, "MM_Msg_Y", "Text")`, shown in Papyrus with `Message.Show()`. Never use `Debug.Notification`
+   or `Debug.MessageBox` for text the player must see: the Debug script does nothing on consoles. README.md,
+   "On-screen text that works on Xbox and PlayStation", has the Papyrus side.
 
 ## 6. Inputs, outputs, exit codes, log
 

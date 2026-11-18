@@ -10,7 +10,9 @@ namespace BuildKit;
 
 public static class GameplayOptions
 {
-    public const string DebugName = "  Show Debug Messages";
+    // "(PC only)" since 2026-11-18: the whole Debug script is DebugOnly, so debug lines never show on Xbox or
+    // PlayStation. The two leading spaces indent the option under its group in the menu.
+    public const string DebugName = "  Show Debug Messages (PC only)";
 
     /// <summary>The line the game's own options end with: "ON/OFF: Default value of this option."</summary>
     public static string DefaultNote(bool on) =>
@@ -36,7 +38,8 @@ public static class GameplayOptions
     public static GameplayOption Debug(StarfieldMod mod, string editorId, string shows,
         FormKey? key = null, Func<string, TranslatedString>? text = null, ushort? formVersion = Plugin.CkFormVersion) =>
         Bool(mod, editorId, DebugName,
-            $"Shows {shows}. Turn it on when reporting a problem. The lines always go to the Papyrus log when Papyrus logging is on.",
+            $"Shows {shows}. Turn it on when reporting a problem. The lines always go to the Papyrus log when Papyrus logging is on. " +
+            "PC only: Xbox and PlayStation can't show debug lines.",
             false, key, text, formVersion);
 
     /// <summary>The mod's own options group, listing the options in this order. Create it after its options

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 (2026-11-18)
+
+Built on Mutagen.Bethesda.Starfield 0.54.4.
+
+- New `Messages.Hud` and `Messages.Box` make Message records for on-screen text that also shows on Xbox and
+  PlayStation, where the Debug script does nothing. The field shapes and their order copy vanilla HUD and box messages.
+  Tests cover the fields, the buttons, a fixed FormID, localized text and the subrecord order. Plugins that don't call
+  them are unchanged.
+- The debug option made by `GameplayOptions.Debug` is now named "Show Debug Messages (PC only)", and its description
+  ends "PC only: Xbox and PlayStation can't show debug lines." The Debug script does nothing on consoles. A plugin
+  rebuilt with this version differs from an earlier build in that option's name and description only.
+
 ## 0.3.1 (2026-11-16)
 
 Security fixes. Plugins built with 0.3.0 are unchanged.

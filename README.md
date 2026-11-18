@@ -51,8 +51,35 @@ PluginWriter.Write(mod, "out", game);                    // writes out\MyMod.esm
 | `Quests` | `New(mod, editorId)` makes a quest with empty (not missing) condition and alias lists, so it's written with NEXT and ANAM like a Creation Kit quest. A quest made with plain `AddNew` has neither. |
 | `DialogTopics` | `FixSubtypeNames(mod)` fills a blank SubtypeName (SNAM) on every dialogue topic with the code that matches its Subtype, as vanilla topics have. `PluginWriter.Write` calls it for you. |
 | `IdLock` | `Apply(mod, lockPath)` keeps every own record's FormID the same from build to build, using a JSON file of EditorID to FormID. New records get the next free ID. The build stops if a locked record disappears, if two records share an EditorID, or if a record has no EditorID. `update: false` only checks. |
-| `GameplayOptions` | `Debug(...)` makes a "Show Debug Messages" option, off by default, for Settings > Gameplay Options. `Bool(...)` makes other on/off options, and `Group(...)` makes the mod's own options group. Create the options first and the group last. |
+| `GameplayOptions` | `Debug(...)` makes a "Show Debug Messages (PC only)" option, off by default, for Settings > Gameplay Options. `Bool(...)` makes other on/off options, and `Group(...)` makes the mod's own options group. Create the options first and the group last. |
 | `Localized` | `Text(s)` gives the same text in all nine languages the game ships, for localized plugins. |
+| `Messages` | `Hud(mod, editorId, text, seconds)` makes a top-left HUD line, and `Box(mod, editorId, text, title, buttons, ownerQuest)` makes a message box. Both copy the shape of vanilla messages. Show them in Papyrus with `Message.Show()`, which works on Xbox and PlayStation. `Debug.Notification` and `Debug.MessageBox` do nothing on consoles (see below). |
+
+### On-screen text that works on Xbox and PlayStation
+
+Bethesda's `Debug.psc` marks the whole Debug script `DebugOnly`, so `Debug.Notification`, `Debug.MessageBox` and
+`Debug.Trace` do nothing in the console builds of the game. Text the player must see belongs in a Message record:
+
+```csharp
+var sent = Messages.Hud(mod, "MM_Msg_Sent", "%.0f items sent to your ship", 3);
+var stop = Messages.Box(mod, "MM_Msg_Stop", "The hunt is stopped.");          // no buttons: the game adds OK
+var menu = Messages.Box(mod, "MM_Msg_Menu", "Where to?", "MY MOD", ["Home", "Cancel"], quest);
+```
+
+```papyrus
+Message Property MM_Msg_Sent Auto Const Mandatory
+
+Function Say(Message akMsg, float afArg1 = 0.0, float afArg2 = 0.0)
+  akMsg.Show(afArg1, afArg2)                           ; shows on PC, Xbox and PlayStation
+  Debug.Trace("[MM] " + akMsg + " " + afArg1)          ; the PC Papyrus log only
+EndFunction
+
+Say(MM_Msg_Sent, sentCount)
+```
+
+A Message fills in numbers (`%.0f`, up to nine), never text, so a message whose wording changes needs one Message
+per case. `Box` with buttons returns the index of the button picked from `Show()`. Keep `Debug.Trace` and the
+"Show Debug Messages (PC only)" switch for troubleshooting on PC.
 
 ### Write options
 
