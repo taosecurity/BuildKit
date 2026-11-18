@@ -3,8 +3,8 @@
 BuildKit is a small C# library for programs that build Starfield plugins (`.esm` files) with
 [Mutagen](https://github.com/Mutagen-Modding/Mutagen). It holds the setup code such a builder otherwise copies from
 project to project: opening masters with the right flags, writing the plugin the way the Creation Kit does, filling
-effect data Mutagen leaves out, keeping FormIDs fixed between builds, adding a "Show Debug Messages (PC only)" option, and making Message records for on-screen text that also works on
-Xbox and PlayStation.
+effect data Mutagen leaves out, keeping FormIDs fixed between builds, adding a "Show Debug Messages (PC only)"
+option, and making Message records for on-screen text that also works on Xbox and PlayStation.
 
 It targets **Mutagen.Bethesda.Starfield 0.54.4** exactly. Each BuildKit release says which Mutagen version it was
 tested with; a new Mutagen release gets a new BuildKit release.
@@ -82,8 +82,13 @@ EndFunction
 ```
 
 A Message fills in numbers (`%.0f`, up to nine), never text, so a message whose wording changes needs one Message
-per case. A `%` in the text starts a number slot, so don't put a literal percent sign in it (write "percent"). `Box` with buttons returns the index of the button picked from `Show()`. Keep `Debug.Trace` and the
+per case. A `%` in the text starts a number slot, so don't put a literal percent sign in it (write "percent").
+`Box` with buttons returns the index of the button picked from `Show()`. Keep `Debug.Trace` and the
 "Show Debug Messages (PC only)" switch for troubleshooting on PC.
+
+On a localized plugin, `Messages` and `GameplayOptions` put their text in all nine languages unless you pass your
+own `text:` function. They decide this when each record is made, so make the plugin with
+`Plugin.New(..., localized: true)` rather than turning localization on later.
 
 ### Write options
 

@@ -57,8 +57,11 @@ exists. No game files are needed for this; a real builder points `GameData` at t
 4. Run the library's tests from a clone of the repo: `dotnet test tests/BuildKit.Tests`.
 5. On-screen text that also works on Xbox and PlayStation: `Messages.Hud(mod, "MM_Msg_X", "Text %.0f", 3)` or
    `Messages.Box(mod, "MM_Msg_Y", "Text")`, shown in Papyrus with `Message.Show()`. Never use `Debug.Notification`
-   or `Debug.MessageBox` for text the player must see: the Debug script does nothing on consoles. README.md,
-   "On-screen text that works on Xbox and PlayStation", has the Papyrus side.
+   or `Debug.MessageBox` for text the player must see: the Debug script does nothing on consoles. Don't put a
+   literal `%` in message text (it starts a number slot; write "percent"). README.md, "On-screen text that works on
+   Xbox and PlayStation", has the Papyrus side.
+6. Localized plugin: make it with `Plugin.New(..., localized: true)`. `Messages` and `GameplayOptions` then put
+   their text in all nine languages by default; pass `text:` only to change that.
 
 ## 6. Inputs, outputs, exit codes, log
 

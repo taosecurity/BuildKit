@@ -7,7 +7,7 @@ Built on Mutagen.Bethesda.Starfield 0.54.4.
 - New `Messages.Hud` and `Messages.Box` make Message records for on-screen text that also shows on Xbox and
   PlayStation, where the Debug script does nothing. The field shapes and their order copy vanilla HUD and box messages.
   Tests cover the fields, the buttons, a fixed FormID, localized text and the subrecord order (also with an owner
-  quest, checked against Starfield.esm's 1,149 messages). Calling them adds only the new Message records.
+  quest, in the order vanilla messages such as MissionBoardAcceptMessage use). Calling them adds only the new Message records.
 - On a localized plugin, `GameplayOptions` and `Messages` now put their text in all nine languages
   (`Localized.Text`) when the builder passes no `text:` function. Before, `GameplayOptions` wrote English only in that
   case, so the other languages had missing strings. Builders that pass `text:`, and plugins that aren't localized,

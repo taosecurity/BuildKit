@@ -1,6 +1,6 @@
 // Settings > Gameplay Options records: the mod's own group (GPOG) holding its options (GMOP), with the debug switch
-// "Show Debug Messages (PC only)", off by default. The record shape was checked in game (2026-11-02); no vanilla record is
-// edited. The console can't reach a light plugin's records by name, so this is the debug switch.
+// "Show Debug Messages (PC only)", off by default. The record shape was checked in game (2026-11-02); no vanilla
+// record is edited. The console can't reach a light plugin's records by name, so this is the debug switch.
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Strings;
