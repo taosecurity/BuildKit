@@ -61,32 +61,36 @@ public class MessagesTests
         Assert.Equal(q.FormKey, m.OwnerQuest.FormKey);
     }
 
-    // Subrecord order as in the vanilla records named in Messages.cs (read raw with SFSearch, 2026-11-18).
+    // Subrecord order of the MESG records only, as in the vanilla records named in Messages.cs (read raw with
+    // SFSearch, 2026-11-18). Vanilla orders with an owner quest, e.g. MissionBoardAcceptMessage:
+    // EDID,DESC,FULL,INAM,QNAM,DNAM,BNAM,ITXT... (tools\format-compare\mesg_order.py over Starfield.esm).
     static List<string> Order(byte[] plugin)
     {
         var tags = new List<string>();
-        for (var p = 0; p + 6 <= plugin.Length;)
+        for (var p = 0; p + 24 <= plugin.Length;)
         {
             var sig = System.Text.Encoding.ASCII.GetString(plugin, p, 4);
-            if (sig == "MESG") { p += 24; continue; }      // record header
-            if (sig == "GRUP") { p += 24; continue; }
-            if (sig == "TES4") { p += 24 + BitConverter.ToInt32(plugin, p + 4); continue; }
-            var len = BitConverter.ToUInt16(plugin, p + 4);
-            tags.Add(sig);
-            p += 6 + len;
+            var size = BitConverter.ToInt32(plugin, p + 4);
+            if (sig == "GRUP") { p += 24; continue; }        // step into the group
+            if (sig == "MESG")
+                for (int q = p + 24, end = p + 24 + size; q + 6 <= end; q += 6 + BitConverter.ToUInt16(plugin, q + 4))
+                    tags.Add(System.Text.Encoding.ASCII.GetString(plugin, q, 4));
+            p += 24 + size;                                    // any record: skip its body
         }
         return tags;
     }
 
     [Theory]
-    [InlineData(false, "EDID,DESC,INAM,DNAM,TNAM,BNAM")]
-    [InlineData(true, "EDID,DESC,FULL,INAM,DNAM,BNAM,ITXT")]
-    public void SubrecordsComeInTheVanillaOrder(bool box, string expected)
+    [InlineData("hud", "EDID,DESC,INAM,DNAM,TNAM,BNAM")]
+    [InlineData("box", "EDID,DESC,FULL,INAM,DNAM,BNAM,ITXT")]
+    [InlineData("menu", "EDID,DESC,FULL,INAM,QNAM,DNAM,BNAM,ITXT,ITXT")]
+    public void SubrecordsComeInTheVanillaOrder(string kind, string expected)
     {
         using var t = new TempDir();
         using var game = new GameData(t.Path);
         var mod = Plugin.New("Msg.esm", PluginStyle.Light, "test", "messages");
-        if (box) Messages.Box(mod, "MT_Order", "Text", "Title", ["OK"]);
+        if (kind == "box") Messages.Box(mod, "MT_Order", "Text", "Title", ["OK"]);
+        else if (kind == "menu") Messages.Box(mod, "MT_Order", "Text", "Title", ["Home", "Cancel"], Quests.New(mod, "MT_Q"));
         else Messages.Hud(mod, "MT_Order", "Text", 2);
         var path = PluginWriter.Write(mod, t.Sub("out"), game, Fixtures.NoGapCheck);
         Assert.Equal(expected, string.Join(",", Order(File.ReadAllBytes(path))));
@@ -101,5 +105,21 @@ public class MessagesTests
         Assert.Same(m, mod.Messages.Single());
         Assert.Equal(key, m.FormKey);
         Assert.True(m.Description!.NumLanguages > 1);
+    }
+
+    [Fact]
+    public void LocalizedPluginsGetAllLanguagesByDefault()
+    {
+        var loc = Plugin.New("Loc.esm", PluginStyle.Light, "test", "messages", localized: true);
+        var hud = Messages.Hud(loc, "MT_Hud", "Hello");
+        var box = Messages.Box(loc, "MT_Box", "Hello", "Title", ["OK"]);
+        var opt = GameplayOptions.Debug(loc, "MT_Debug", "lines");
+        var grp = GameplayOptions.Group(loc, "MT_Group", "Mod", [opt]);
+        foreach (var s in new[] { hud.Description, box.Description, box.Name, box.MenuButtons[0].Text, opt.Name, opt.Description, grp.Name })
+            Assert.Equal(Localized.Languages.Length, s!.NumLanguages);
+
+        var plain = Plugin.New("Plain.esm", PluginStyle.Light, "test", "messages");
+        Assert.Equal(1, Messages.Hud(plain, "MT_Hud", "Hello").Description!.NumLanguages);
+        Assert.Equal(1, GameplayOptions.Debug(plain, "MT_Debug", "lines").Name!.NumLanguages);
     }
 }

@@ -17,13 +17,14 @@ namespace BuildKit;
 public static class Messages
 {
     /// <summary>A HUD line in the top-left corner, like Debug.Notification, shown for <paramref name="seconds"/>.
-    /// Show() returns at once. key = a fixed FormID (otherwise the next free one); text = Localized.Text for
-    /// localized plugins; formVersion null = leave as is.</summary>
+    /// Show() returns at once. key = a fixed FormID (otherwise the next free one); text = how to make the text
+    /// (default: Localized.Text on a localized plugin, plain text otherwise); formVersion null = leave as is.
+    /// A "%" in the text starts a number slot, so don't use a literal percent sign (write "percent").</summary>
     public static Message Hud(StarfieldMod mod, string editorId, string message, uint seconds = 2,
         FormKey? key = null, Func<string, TranslatedString>? text = null, ushort? formVersion = Plugin.CkFormVersion)
     {
         var m = New(mod, editorId, key, formVersion);
-        m.Description = Text(message, text);
+        m.Description = Localized.For(mod, message, text);
         m.INAM = 0;
         m.Flags = 0;
         m.DisplayTime = seconds;
@@ -40,13 +41,13 @@ public static class Messages
         FormKey? key = null, Func<string, TranslatedString>? text = null, ushort? formVersion = Plugin.CkFormVersion)
     {
         var m = New(mod, editorId, key, formVersion);
-        m.Description = Text(message, text);
-        if (title != null) m.Name = Text(title, text);
+        m.Description = Localized.For(mod, message, text);
+        if (title != null) m.Name = Localized.For(mod, title, text);
         m.INAM = 0;
         m.Flags = Message.Flag.MessageBox;
         m.BNAM = 0xFFFFFFFF;
         if (ownerQuest != null) m.OwnerQuest.SetTo(ownerQuest);
-        foreach (var b in buttons ?? []) m.MenuButtons.Add(new MessageButton { Text = Text(b, text) });
+        foreach (var b in buttons ?? []) m.MenuButtons.Add(new MessageButton { Text = Localized.For(mod, b, text) });
         if (key != null) mod.Messages.Add(m);
         return m;
     }
@@ -58,6 +59,4 @@ public static class Messages
         if (formVersion is { } fv) m.FormVersion = fv;
         return m;
     }
-
-    static TranslatedString Text(string s, Func<string, TranslatedString>? text) => text != null ? text(s) : s;
 }

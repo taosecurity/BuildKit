@@ -1,5 +1,5 @@
 // Settings > Gameplay Options records: the mod's own group (GPOG) holding its options (GMOP), with the debug switch
-// "Show Debug Messages", off by default. The record shape was checked in game (2026-11-02); no vanilla record is
+// "Show Debug Messages (PC only)", off by default. The record shape was checked in game (2026-11-02); no vanilla record is
 // edited. The console can't reach a light plugin's records by name, so this is the debug switch.
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.Plugins;
@@ -19,15 +19,16 @@ public static class GameplayOptions
         $"\n\n<font color=\"#EDEDED\">{(on ? "ON" : "OFF")}</font>: Default value of this option.";
 
     /// <summary>An on/off option. The description gets the default-value line appended. key = a fixed FormID
-    /// (otherwise the next free one); text = Localized.Text for localized plugins; formVersion null = leave as is.</summary>
+    /// (otherwise the next free one); text = how to make the text (default: Localized.Text on a localized plugin,
+    /// plain text otherwise); formVersion null = leave as is.</summary>
     public static GameplayOption Bool(StarfieldMod mod, string editorId, string name, string description, bool defaultOn,
         FormKey? key = null, Func<string, TranslatedString>? text = null, ushort? formVersion = Plugin.CkFormVersion)
     {
         var o = key is { } k ? new GameplayOption(k, StarfieldRelease.Starfield) : mod.GameplayOptions.AddNew(editorId);
         o.EditorID = editorId;
         if (formVersion is { } fv) o.FormVersion = fv;
-        o.Name = Text(name, text);
-        o.Description = Text(description + DefaultNote(defaultOn), text);
+        o.Name = Localized.For(mod, name, text);
+        o.Description = Localized.For(mod, description + DefaultNote(defaultOn), text);
         o.Data = new BoolGameplayOptionData { Value1 = defaultOn, Value2 = defaultOn };
         if (key != null) mod.GameplayOptions.Add(o);
         return o;
@@ -50,13 +51,11 @@ public static class GameplayOptions
         var g = key is { } k ? new GameplayOptionsGroup(k, StarfieldRelease.Starfield) : mod.GameplayOptionsGroups.AddNew(editorId);
         g.EditorID = editorId;
         if (formVersion is { } fv) g.FormVersion = fv;
-        g.Name = Text(name, text);
+        g.Name = Localized.For(mod, name, text);
         var leaf = new GameplayOptionsGroupLeaf();
         foreach (var o in options) leaf.GameplayOptions.Add(o.ToLink<IGameplayOptionGetter>());
         g.Options = leaf;
         if (key != null) mod.GameplayOptionsGroups.Add(g);
         return g;
     }
-
-    static TranslatedString Text(string s, Func<string, TranslatedString>? text) => text != null ? text(s) : s;
 }

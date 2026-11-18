@@ -2,6 +2,7 @@
 // missing string.
 using Mutagen.Bethesda.Plugins.Records;
 using Mutagen.Bethesda.Strings;
+using Mutagen.Bethesda.Starfield;
 
 namespace BuildKit;
 
@@ -21,4 +22,10 @@ public static class Localized
         foreach (var l in Languages) t.Set(l, s);
         return t;
     }
+
+    /// <summary>Text for a record in <paramref name="mod"/>: the builder's own <paramref name="text"/> function if
+    /// given, otherwise all nine languages on a localized plugin (so no language shows a missing string) and plain
+    /// text on any other plugin.</summary>
+    internal static TranslatedString For(StarfieldMod mod, string s, Func<string, TranslatedString>? text) =>
+        text != null ? text(s) : mod.UsingLocalization ? Text(s) : s;
 }
