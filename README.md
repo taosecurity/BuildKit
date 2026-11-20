@@ -1,25 +1,28 @@
 # BuildKit
 
 BuildKit is a small C# library for programs that build Starfield plugins (`.esm` files) with
-[Mutagen](https://github.com/Mutagen-Modding/Mutagen). It holds the setup code such a builder otherwise copies from
-project to project: opening masters with the right flags, writing the plugin the way the Creation Kit does, filling
-effect data Mutagen leaves out, keeping FormIDs fixed between builds, adding a "Show Debug Messages (PC only)"
-option, and making Message records for on-screen text that also works on Xbox and PlayStation.
+[Mutagen](https://github.com/Mutagen-Modding/Mutagen). It does the setup work such a builder otherwise copies from
+project to project, and it writes your plugin the way Bethesda's Creation Kit does, so you can spend your time on your
+mod's own records.
 
-It targets **Mutagen.Bethesda.Starfield 0.54.4** exactly. Each BuildKit release says which Mutagen version it was
-tested with; a new Mutagen release gets a new BuildKit release.
+Get it from [NuGet](https://www.nuget.org/packages/Taosecurity.Starfield.BuildKit). It targets
+**Mutagen.Bethesda.Starfield 0.54.4** exactly; each BuildKit release says which Mutagen version it was tested with,
+and a new Mutagen release gets a new BuildKit release.
 
-For AI assistants: step-by-step instructions are in [AGENTS.md](AGENTS.md).
+## First command
 
-## Install
+In a .NET 9 (or later) console project:
 
 ```
 dotnet add package Taosecurity.Starfield.BuildKit
 ```
 
-BuildKit needs .NET 9 and brings Mutagen.Bethesda.Starfield 0.54.4 with it.
+For AI assistants: step-by-step instructions are in [AGENTS.md](AGENTS.md).
 
-## Quick start
+## Example
+
+This builder opens the game's main master, makes a light plugin with a keyword, an on-screen message and a "Show
+Debug Messages (PC only)" option, keeps its FormIDs fixed, and writes it:
 
 ```csharp
 using BuildKit;
@@ -32,7 +35,7 @@ game.Open("Starfield.esm");                      // plus any other master, e.g. 
 
 var mod = Plugin.New("MyMod.esm", PluginStyle.Light, "Your Name", "My Mod 0.1.0");
 var kw = mod.Keywords.AddNew("MM_Keyword");      // ... your records ...
-var vanilla = game.Get<IKeywordGetter>("SomeVanillaKeyword");   // EditorID lookups across the open masters
+var hello = Messages.Hud(mod, "MM_Msg_Hello", "My Mod is running", 3);
 
 var dbg = GameplayOptions.Debug(mod, "MM_Option_Debug", "My Mod's log lines on screen");
 GameplayOptions.Group(mod, "MM_Options", "My Mod", [dbg]);
@@ -40,6 +43,67 @@ GameplayOptions.Group(mod, "MM_Options", "My Mod", [dbg]);
 Console.WriteLine(IdLock.Apply(mod, "ids.lock.json"));   // commit ids.lock.json with your builder
 PluginWriter.Write(mod, "out", game);                    // writes out\MyMod.esm
 ```
+
+`dotnet run` printed this with BuildKit 0.4.1, and wrote an 802-byte `out\MyMod.esm`:
+
+```
+> dotnet run
+ID lock: 4 records, 4 new, 0 moved back to their locked IDs (ids.lock.json)
+  BuildKit: Bethesda fields filled: 0 message back-out index, 0 form list add-to-list, 0 model light layer, 1 keyword, 0 story-manager quest node
+  BuildKit: form version 582 set on 1 own records left at Mutagen's 576
+  BuildKit: header interior cell count (INCC) set to 0 (was unset)
+  BuildKit: own records written in Bethesda's FE FormID form (light plugin)
+  gap check: skipped (mutagen-gap-check.py not found; set BUILDKIT_TOOLS or WriteOptions.GapCheckScript)
+```
+
+Each `BuildKit:` line is one thing it changed to match Bethesda's own plugins. The first line is the ID lock's
+summary, which your builder prints. The "gap check: skipped" line is normal: the gap check is an optional script
+that isn't part of the package (see "The gap check" below). Use `game.Get<IKeywordGetter>("SomeEditorID")` to look
+up a record in the open masters by its EditorID.
+
+## What it does for you
+
+- It opens masters with the right light, medium or full flags, so FormIDs resolve correctly.
+- It writes the plugin the way the Creation Kit does: the ONAM list, effect data Mutagen leaves out (EFIF and MUID),
+  Bethesda-style FormIDs for light and medium plugins, and the header and record fields Bethesda always fills.
+- It keeps your records' FormIDs the same from build to build, so saves and patches keep working.
+- It adds a "Show Debug Messages (PC only)" option to the game's Gameplay Options.
+- It makes Message records for on-screen text that also works on Xbox and PlayStation.
+- It writes the same bytes for the same inputs, so you can prove a change to your builder changed nothing.
+
+## Words used here
+
+- **Plugin:** a mod's data file (`.esm`, `.esp` or `.esl`). It adds or changes records in the game.
+- **Master:** a plugin that another plugin needs loaded before it. Starfield.esm is the master of nearly every mod.
+  Every plugin BuildKit makes is itself flagged as a master.
+- **Light plugin (light master):** a plugin flagged to use a small slot, so it doesn't count toward the limit of
+  about 250 full plugins. A light master is a light plugin that is also flagged as a master. Medium plugins are a
+  newer Starfield size between light and full.
+- **Record:** one thing in a plugin, such as a weapon, a quest, a location or a setting.
+- **FormID:** a record's number, such as `0002B560`. The first two digits depend on the load order.
+- **EditorID:** a record's readable name, such as `Ammo_556`, used by the Creation Kit and xEdit.
+- **Override:** a later plugin's copy of a record from an earlier one, which replaces it in the game.
+- **ONAM:** a list in the plugin's header of the master records it overrides inside cells. Without it, the game
+  ignores the plugin's changes to temporary references in its masters' cells.
+- **EFIF and MUID:** two small fields in every effect entry on a spell, enchantment or ingestible (food, drink or
+  medicine). Mutagen leaves them out of new effects, and without them the effect never applies in game.
+- **HITME:** xEdit's warning "Higher Index Than Master-list Entries", for a FormID whose first digits point past the
+  plugin's master list.
+- **INCC:** a header field that holds the number of interior cells in the plugin.
+- **Creation Kit (CK):** Bethesda's official editor for making Starfield mods.
+- **xEdit (SF1Edit):** a community tool for viewing and editing plugins record by record.
+- **Mutagen:** a .NET library for reading and writing Bethesda plugins, which BuildKit builds on.
+- **Papyrus:** Starfield's scripting language. Scripts are written as `.psc` source files and compiled into `.pex`
+  files that the game runs.
+
+## Install
+
+```
+dotnet add package Taosecurity.Starfield.BuildKit
+```
+
+BuildKit needs the .NET 9 SDK (or later) and brings Mutagen.Bethesda.Starfield 0.54.4 with it. Don't add another
+Mutagen version to the same project.
 
 ## What's in it
 
@@ -98,9 +162,9 @@ own `text:` function. They decide this when each record is made, so make the plu
 | `Deterministic` | `true` | Write on one thread. With parallel writing, Mutagen 0.54.4 can number a localized plugin's strings differently on every run. |
 | `FixEffects` | `true` | Run `Effects.FixAll` before writing. |
 | `FixDialogSubtypes` | `true` | Run `DialogTopics.FixSubtypeNames` before writing. Topics that already have an SNAM are left alone. |
-| `BethesdaFormIds` | `true` | Store a light or medium plugin's own new records the way Bethesda's own Starfield plugins do: `FE` plus the plugin's place among light masters (`FE000800` with no light masters), or `FD` plus its place among medium masters. Mutagen 0.54.4 does this only for Bethesda's plugins and gives every other one the full-master form (`01000800`), which xEdit's Check for Errors reports as a HITME. The game loads both, and in-game FormIDs don't change, so saves are unaffected. Full plugins are written the same either way. |
+| `BethesdaFormIds` | `true` | Store a light or medium plugin's own new records in Bethesda's `FE` / `FD` form (see below). |
 | `InteriorCellCount` | `true` | Set the header's INCC to the number of interior cells in the plugin, as every Bethesda plugin has it (xEdit marks it required). |
-| `FillBethesdaFields` | `true` | `BethesdaFields.Fill`: on the plugin's own records only, fill empty fields Bethesda always writes, with Bethesda's usual value: message "index chosen on back out" -1, form list "add to list" null, model light layer 1 on Aid items and activators, keyword color FF FF FF 00 / type 0 / FNAM zeros, story-manager quest node "max concurrent quests" 0. Overrides and fields the builder set are left alone. |
+| `FillBethesdaFields` | `true` | Fill empty fields that Bethesda always writes, on the plugin's own records only (see below). |
 | `CkFormVersion` | `true` | Own records still at Mutagen 0.54.4's default form version (576) get the Creation Kit's 582. |
 | `CompressNpcs` | `true` | Own NPC records are written compressed, as all of Bethesda's are. |
 | `ZeroGroupStamps` | `true` | `BethesdaFields.ZeroGroupStamps`: the two version-control words in every group header are written as zero, as in all of Bethesda's own plugins. A Creation Kit save stamps them, and Mutagen keeps those stamps when a builder copies records or groups from such a plugin. The game doesn't use them. |
@@ -113,14 +177,33 @@ own `text:` function. They decide this when each record is made, so make the plu
 | `GapCheckMastersDir` | none | Extra folder the gap check searches for masters. |
 | `FailOnGapErrors` | `true` | Throw when the gap check reports an error. |
 
+**`BethesdaFormIds` in detail.** Bethesda's own light plugins store their new records as `FE` plus the plugin's place
+among light masters (`FE000800` with no light masters), and medium plugins as `FD` plus their place among medium
+masters. Mutagen 0.54.4 does this only for Bethesda's plugins and gives every other one the full-master form
+(`01000800`), which xEdit's Check for Errors reports as a HITME.
+
+The game loads both forms, and in-game FormIDs don't change, so saves are unaffected. Full plugins are written the
+same either way.
+
+**`FillBethesdaFields` in detail.** `BethesdaFields.Fill` gives each empty field Bethesda's usual value: message
+"index chosen on back out" -1, form list "add to list" null, model light layer 1 on Aid items and activators, keyword
+color FF FF FF 00 / type 0 / FNAM zeros, and story-manager quest node "max concurrent quests" 0. Overrides, and
+fields the builder set itself, are left alone.
+
 ### The gap check
 
-The gap check is an optional Python script that compares a written plugin with its masters and reports data Mutagen
-0.54.4 is known to lose on write, plus missing ONAM entries. It isn't part of this package. BuildKit runs it when it
-finds `mutagen-gap-check.py` (from `WriteOptions.GapCheckScript`, the `BUILDKIT_TOOLS` environment variable, or a
-`tools` folder above the builder or the current folder, never a drive-root `C:\tools`); otherwise it prints one
-"skipped" line and carries on. Before it runs, it prints the script and the Python it uses (Python is found on PATH
-by full path, so a `python.exe` in the current folder is never picked).
+The gap check is an optional Python script that compares a written plugin with its masters. It reports data Mutagen
+0.54.4 is known to lose on write, plus missing ONAM entries. It isn't part of this package.
+
+BuildKit runs it when it finds `mutagen-gap-check.py` in one of these places, in this order:
+
+- `WriteOptions.GapCheckScript`;
+- the folder named by the `BUILDKIT_TOOLS` environment variable;
+- a `tools` folder above the builder or the current folder (never a drive-root folder such as `C:\tools`).
+
+If it finds none, it prints one "skipped" line and carries on, as in the Example. Before it runs, it prints the
+script and the Python it uses. Python is found on PATH by its full path, so a `python.exe` in the current folder is
+never picked.
 
 ### Master names
 
@@ -132,7 +215,7 @@ another computer. `GameData.IsPlainPluginName` is public for builders that read 
 ## What BuildKit prints
 
 BuildKit writes what it changed to standard output, one line per decision, each starting `  BuildKit:` (for example
-EFIF/MUID filled, Bethesda fields filled, group headers zeroed) or `  gap check:`. A problem it can't fix is thrown as
+EFIF/MUID filled, Bethesda fields filled, group headers zeroed) or `  gap check:`. The Example above shows a real run. A problem it can't fix is thrown as
 an exception whose message names the file or records involved. To keep a log of a build, redirect your
 builder's output: `dotnet run > build.log 2>&1`.
 
@@ -153,9 +236,18 @@ dotnet test tests/BuildKit.Tests
 
 The tests make every plugin they need in a temp folder. No game files are needed or included.
 
+## Found a mistake?
+
+Open an issue: https://github.com/taosecurity/BuildKit/issues
+
 ## Privacy
 
 BuildKit collects nothing and makes no network calls. See [PRIVACY.md](PRIVACY.md).
+
+## Credits
+
+BuildKit is made by Richard Bejtlich. It is built on [Mutagen](https://github.com/Mutagen-Modding/Mutagen) by the
+Mutagen team.
 
 ## License
 

@@ -2,28 +2,41 @@
 
 ## 0.4.1 (2026-11-20)
 
-A fix for Linux and Proton. Plugins built with 0.4.0 are unchanged.
+### What's new
 
-- `GameData.Locate` (and so `Open` and `TryOpen`) now finds a plugin in any spelling. Before, it asked for the exact
-  name only, so on a case-sensitive file system a plugin was lost when a load order or another plugin's master list
-  spelled it differently from the file (for example `Starfield.esm` against `starfield.ESM`). The exact spelling is
-  still tried first, in every folder, before any other spelling, so Windows behaves exactly as before and an exact
-  match in the Data folder wins over a differently spelled copy in an extra folder. Each folder is listed once,
-  sorted, and listed again when its modification time changes. A name that isn't in the listing lists the folder
-  again at once while the folder's time is less than a minute old, and otherwise at most once a second, so a plugin
-  written just now is still found on file systems that keep that time coarsely, while a long-unchanged Data folder
-  isn't listed again for every missing optional plugin in a loop.
-- A plugin found under another spelling keeps the requested name as its ModKey, so master lists in built plugins
-  don't depend on how the disk spells the file. Its own loose string tables (in a `Strings` folder of any spelling)
-  are copied under the requested name into a temporary folder, deleted on `Dispose`, so a localized plugin keeps its
-  text. The same happens for an exactly spelled plugin whose `Strings` folder is spelled differently.
-- New `GameData.Warnings` (read-only): when the file used differs only in case from other files in its folder and
-  neither is spelled exactly as requested, the first in sorted order is used and a warning is added there (and
-  written once to standard error). `IsPlainPluginName` is unchanged.
+This is a fix for Linux and Proton. `GameData` now finds a plugin whatever its capitalization, so a builder works on a case-sensitive file system even when a load order or a master list spells a plugin differently from the file (for example `Starfield.esm` against `starfield.ESM`).
+
+Windows behaves exactly as before, and plugins built with 0.4.0 are unchanged.
+
+### Example
+
+A light plugin built with 0.4.1 against the Steam copy of Starfield.esm (the builder is in the README's Example):
+
+    > dotnet run
+    ID lock: 4 records, 4 new, 0 moved back to their locked IDs (ids.lock.json)
+      BuildKit: Bethesda fields filled: 0 message back-out index, 0 form list add-to-list, 0 model light layer, 1 keyword, 0 story-manager quest node
+      BuildKit: form version 582 set on 1 own records left at Mutagen's 576
+      BuildKit: header interior cell count (INCC) set to 0 (was unset)
+      BuildKit: own records written in Bethesda's FE FormID form (light plugin)
+      gap check: skipped (mutagen-gap-check.py not found; set BUILDKIT_TOOLS or WriteOptions.GapCheckScript)
+
+### Fixes
+
+- `GameData.Locate` (and so `Open` and `TryOpen`) finds a plugin in any spelling. The exact spelling is still tried first, in every folder, so an exact match in the Data folder wins over a differently spelled copy in an extra folder.
+- Each folder is listed once, sorted, and listed again when its modification time changes. A plugin written a moment ago is still found, and a long-unchanged Data folder isn't listed again for every missing optional plugin.
+- A plugin found under another spelling keeps the requested name as its ModKey, so master lists in built plugins don't depend on how the disk spells the file.
+- Its loose string tables (in a `Strings` folder of any spelling) are copied under the requested name into a temporary folder, deleted on `Dispose`, so a localized plugin keeps its text. The same happens for an exactly spelled plugin whose `Strings` folder is spelled differently.
+- New `GameData.Warnings` (read-only): when the file used differs only in case from other files in its folder and none is spelled exactly as requested, the first in sorted order is used and a warning is added there (and written once to standard error).
 - A damaged plugin that makes `TryOpen` throw gives the same error on a second try, not "is its own master".
-- Known limits: the optional gap check (`mutagen-gap-check.py`, run by `PluginWriter`) still looks masters up by
-  their exact names, and string tables inside a BA2 archive of a differently spelled plugin are looked for under
-  the requested name.
+
+### Not yet
+
+- The optional gap check (`mutagen-gap-check.py`, run by `PluginWriter`) still looks masters up by their exact names.
+- String tables inside a BA2 archive of a differently spelled plugin are looked for under the requested name.
+
+### Download
+
+`dotnet add package Taosecurity.Starfield.BuildKit --version 0.4.1`
 
 ## 0.4.0 (2026-11-18)
 
