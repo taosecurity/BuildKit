@@ -64,9 +64,16 @@ public sealed class GameData : IDisposable
     }
 
     // Folder listings for the any-spelling match, one per folder. A listing is made again when the folder's
-    // modification time changes (adding, removing or renaming a file changes it), and once more on a miss, because
-    // some file systems (FAT, exFAT, network shares) keep that time too coarsely to show a file written just now.
-    readonly Dictionary<string, (DateTime Stamp, Dictionary<string, string> Files)> listings = new(StringComparer.Ordinal);
+    // modification time changes (adding, removing or renaming a file changes it). Some file systems (FAT, exFAT,
+    // network shares) keep that time too coarsely to show a file written just now, so a miss also lists the folder
+    // again, but only while the folder's time is recent (RecentChange); an old, unchanged folder such as a big Data
+    // folder isn't listed again for every missing optional plugin.
+    sealed record Listing(DateTime Stamp, Dictionary<string, string> Files, Dictionary<string, string> CaseTwins);
+    readonly Dictionary<string, Listing> listings = new(StringComparer.Ordinal);
+
+    /// <summary>How recent a folder's modification time must be for a miss to list it again. Wider than any file
+    /// system's time resolution, with room for a network share's clock being a little off.</summary>
+    static readonly TimeSpan RecentChange = TimeSpan.FromSeconds(60);
 
     /// <summary>The path of a file in the folder whose name matches in any spelling; null if there is none.</summary>
     string? AnySpelling(string dir, string name)
@@ -74,35 +81,49 @@ public sealed class GameData : IDisposable
         DateTime stamp;
         try { stamp = Directory.GetLastWriteTimeUtc(dir); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
-        if (listings.TryGetValue(dir, out var l) && l.Stamp == stamp && l.Files.TryGetValue(name, out var cached))
-            return cached;
-        return List(dir, stamp)?.GetValueOrDefault(name);   // new, changed, or a miss in the cached listing
+        var l = listings.GetValueOrDefault(dir);
+        if (l != null && l.Stamp == stamp)
+        {
+            if (l.Files.TryGetValue(name, out var cached) && File.Exists(cached)) return Found(dir, name, l, cached);
+            var cachedMiss = !l.Files.ContainsKey(name);
+            if (cachedMiss && DateTime.UtcNow - stamp > RecentChange) return null;   // old folder: the miss stands
+        }
+        l = List(dir, stamp);                                   // new, changed, gone, or a miss in a recent folder
+        return l != null && l.Files.TryGetValue(name, out var path) ? Found(dir, name, l, path) : null;
+    }
+
+    /// <summary>The found path, with a warning when another file in the folder differs from it only in case.</summary>
+    string Found(string dir, string name, Listing l, string path)
+    {
+        if (l.CaseTwins.TryGetValue(name, out var twin))
+            Warn($"{dir}: {Path.GetFileName(path)} and {twin} differ only in case; using {Path.GetFileName(path)}");
+        return path;
     }
 
     /// <summary>Lists the folder and keeps the listing; null (and nothing kept, so the next lookup tries again) when
     /// the folder can't be listed.</summary>
-    Dictionary<string, string>? List(string dir, DateTime stamp)
+    Listing? List(string dir, DateTime stamp)
     {
-        Dictionary<string, string>? files = null;
+        Listing? l = null;
         try
         {
             if (Directory.Exists(dir))
             {
-                files = new(StringComparer.OrdinalIgnoreCase);
+                l = new(stamp, new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase));
                 // Sorted, so when two files differ only in case (possible on Linux) the same one wins on every run.
                 foreach (var f in Directory.EnumerateFiles(dir).OrderBy(f => f, StringComparer.Ordinal))
-                    if (!files.TryAdd(Path.GetFileName(f), f))
-                        Warn($"{dir}: {Path.GetFileName(files[Path.GetFileName(f)])} and {Path.GetFileName(f)} differ only in case; using the first");
+                    if (!l.Files.TryAdd(Path.GetFileName(f), f))
+                        l.CaseTwins.TryAdd(Path.GetFileName(f), Path.GetFileName(f));
             }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             Warn($"{dir}: can't list the folder ({e.Message}); plugins are found only by their exact name");
-            files = null;
+            l = null;
         }
-        if (files == null) listings.Remove(dir);
-        else listings[dir] = (stamp, files);
-        return files;
+        if (l == null) listings.Remove(dir);
+        else listings[dir] = l;
+        return l;
     }
 
     void Warn(string w)
@@ -140,18 +161,64 @@ public sealed class GameData : IDisposable
         var path = Locate(fileName);
         if (path == null) return null;
         if (!opening.Add(fileName)) throw new InvalidOperationException($"{fileName} is its own master");
-        foreach (var master in HeaderMasters(path))
-            if (TryOpen(master) == null) { opening.Remove(fileName); return null; }
-        // The ModKey takes the requested spelling, not the file's, as it did when Windows opened the file by that
-        // name, so master lists in built plugins don't depend on how a case-sensitive disk spells the file.
-        var mod = StarfieldMod.CreateFromBinaryOverlay(new ModPath(ModKey.FromFileName(fileName), path),
-            StarfieldRelease.Starfield, ReadParams());
-        opening.Remove(fileName);
+        IStarfieldModDisposableGetter mod;
+        try
+        {
+            foreach (var master in HeaderMasters(path))
+                if (TryOpen(master) == null) return null;
+            // The ModKey takes the requested spelling, not the file's, as it did when Windows opened the file by that
+            // name, so master lists in built plugins don't depend on how a case-sensitive disk spells the file.
+            mod = StarfieldMod.CreateFromBinaryOverlay(new ModPath(ModKey.FromFileName(fileName), path),
+                StarfieldRelease.Starfield, ReadParams(StringsUnderRequestedName(path, fileName)));
+        }
+        finally { opening.Remove(fileName); }
         order.Add(mod);
         opened[fileName] = mod;
         linkCache = null;
         editorIds = null;
         return mod;
+    }
+
+    string? stringsCopies;
+
+    /// <summary>For a plugin found under another spelling (only on a case-sensitive disk): Mutagen looks for loose
+    /// string tables by the ModKey's name, which is the requested spelling, so they'd be missed. This copies the
+    /// plugin's tables from its Strings folder (any spelling) into a private temporary folder under the requested
+    /// name and returns that folder; null when the spelling is the same or there are no loose tables. The folder is
+    /// deleted on Dispose. Known limit: tables inside a BA2 archive named after a differently spelled plugin are
+    /// still looked for under the requested name.</summary>
+    string? StringsUnderRequestedName(string path, string fileName)
+    {
+        var diskStem = Path.GetFileNameWithoutExtension(path);
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+        if (diskStem == stem) return null;
+        try
+        {
+            var strings = Directory.EnumerateDirectories(Path.GetDirectoryName(path)!)
+                .Where(d => string.Equals(Path.GetFileName(d), "Strings", StringComparison.OrdinalIgnoreCase))
+                .Order(StringComparer.Ordinal).FirstOrDefault();
+            if (strings == null) return null;
+            var tables = Directory.EnumerateFiles(strings)
+                .Where(f => Path.GetFileName(f).StartsWith(diskStem + "_", StringComparison.OrdinalIgnoreCase))
+                .Order(StringComparer.Ordinal).ToList();
+            if (tables.Count == 0) return null;
+            stringsCopies ??= Directory.CreateTempSubdirectory("buildkit-strings-").FullName;
+            var dir = Path.Combine(stringsCopies, order.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Directory.CreateDirectory(dir);
+            foreach (var f in tables)
+            {
+                // Name_lang.EXT, with the language in lower case and the extension in upper case, as Mutagen writes them.
+                var rest = Path.GetFileName(f)[(diskStem.Length + 1)..];
+                var target = $"{stem}_{Path.GetFileNameWithoutExtension(rest).ToLowerInvariant()}{Path.GetExtension(rest).ToUpperInvariant()}";
+                if (!File.Exists(Path.Combine(dir, target))) File.Copy(f, Path.Combine(dir, target));   // first in sorted order wins
+            }
+            return dir;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Warn($"{path}: can't copy its string tables under the name {fileName} ({e.Message}); its text may read as empty");
+            return null;
+        }
     }
 
     /// <summary>Read settings for a plugin whose masters are all open: their master flags, and optionally a Strings
@@ -229,5 +296,10 @@ public sealed class GameData : IDisposable
         foreach (var m in order) m.Dispose();
         order.Clear();
         opened.Clear();
+        if (stringsCopies != null)
+        {
+            try { Directory.Delete(stringsCopies, true); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            stringsCopies = null;
+        }
     }
 }

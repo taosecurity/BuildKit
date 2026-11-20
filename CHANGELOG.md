@@ -9,15 +9,20 @@ A fix for Linux and Proton. Plugins built with 0.4.0 are unchanged.
   spelled it differently from the file (for example `Starfield.esm` against `starfield.ESM`). The exact spelling is
   still tried first, in every folder, before any other spelling, so Windows behaves exactly as before and an exact
   match in the Data folder wins over a differently spelled copy in an extra folder. Each folder is listed once,
-  sorted, and listed again when its modification time changes or a name isn't in the listing, so a plugin written
-  later is still found, even on file systems that keep that time coarsely.
+  sorted, and listed again when its modification time changes. A name that isn't in the listing lists the folder
+  again only while the folder's time is less than a minute old, so a plugin written just now is still found on file
+  systems that keep that time coarsely, while a long-unchanged Data folder isn't listed again for every missing
+  optional plugin.
 - A plugin found under another spelling keeps the requested name as its ModKey, so master lists in built plugins
-  don't depend on how the disk spells the file.
-- New `GameData.Warnings` (read-only): when two files in a folder differ only in case and neither is spelled exactly
-  as requested, the first in sorted order is used and a warning is added there (and written once to standard
-  error). `IsPlainPluginName` is unchanged.
-- Known limit: the optional gap check (`mutagen-gap-check.py`, run by `PluginWriter`) still looks masters up by
-  their exact names.
+  don't depend on how the disk spells the file. Its loose string tables (in a `Strings` folder of any spelling) are
+  copied under the requested name into a temporary folder, deleted on `Dispose`, so a localized plugin keeps its text.
+- New `GameData.Warnings` (read-only): when the file used differs only in case from another file in its folder and
+  neither is spelled exactly as requested, the first in sorted order is used and a warning is added there (and
+  written once to standard error). `IsPlainPluginName` is unchanged.
+- A damaged plugin that makes `TryOpen` throw gives the same error on a second try, not "is its own master".
+- Known limits: the optional gap check (`mutagen-gap-check.py`, run by `PluginWriter`) still looks masters up by
+  their exact names, and string tables inside a BA2 archive of a differently spelled plugin are looked for under
+  the requested name.
 
 ## 0.4.0 (2026-11-18)
 
