@@ -65,15 +65,19 @@ public sealed class GameData : IDisposable
 
     // Folder listings for the any-spelling match, one per folder. A listing is made again when the folder's
     // modification time changes (adding, removing or renaming a file changes it). Some file systems (FAT, exFAT,
-    // network shares) keep that time too coarsely to show a file written just now, so a miss also lists the folder
-    // again, but only while the folder's time is recent (RecentChange); an old, unchanged folder such as a big Data
-    // folder isn't listed again for every missing optional plugin.
-    sealed record Listing(DateTime Stamp, Dictionary<string, string> Files, Dictionary<string, string> CaseTwins);
+    // network shares) keep that time too coarsely, or cache it, so a miss also lists the folder again: at once while
+    // the folder's time is recent (RecentChange), and otherwise at most once per RelistGap, so a long-unchanged folder
+    // such as a big Data folder isn't listed again for every missing optional plugin in a loop.
+    sealed record Listing(DateTime Stamp, long ListedAt, Dictionary<string, string> Files,
+        Dictionary<string, List<string>> CaseTwins);
     readonly Dictionary<string, Listing> listings = new(StringComparer.Ordinal);
 
-    /// <summary>How recent a folder's modification time must be for a miss to list it again. Wider than any file
+    /// <summary>How recent a folder's modification time must be for every miss to list it again. Wider than any file
     /// system's time resolution, with room for a network share's clock being a little off.</summary>
     static readonly TimeSpan RecentChange = TimeSpan.FromSeconds(60);
+
+    /// <summary>For an older folder, the least time between two listings made for a miss.</summary>
+    static readonly TimeSpan RelistGap = TimeSpan.FromSeconds(1);
 
     /// <summary>The path of a file in the folder whose name matches in any spelling; null if there is none.</summary>
     string? AnySpelling(string dir, string name)
@@ -86,7 +90,9 @@ public sealed class GameData : IDisposable
         {
             if (l.Files.TryGetValue(name, out var cached) && File.Exists(cached)) return Found(dir, name, l, cached);
             var cachedMiss = !l.Files.ContainsKey(name);
-            if (cachedMiss && DateTime.UtcNow - stamp > RecentChange) return null;   // old folder: the miss stands
+            if (cachedMiss && DateTime.UtcNow - stamp > RecentChange
+                && System.Diagnostics.Stopwatch.GetElapsedTime(l.ListedAt) < RelistGap)
+                return null;                                    // old folder listed just now: the miss stands
         }
         l = List(dir, stamp);                                   // new, changed, gone, or a miss in a recent folder
         return l != null && l.Files.TryGetValue(name, out var path) ? Found(dir, name, l, path) : null;
@@ -95,8 +101,8 @@ public sealed class GameData : IDisposable
     /// <summary>The found path, with a warning when another file in the folder differs from it only in case.</summary>
     string Found(string dir, string name, Listing l, string path)
     {
-        if (l.CaseTwins.TryGetValue(name, out var twin))
-            Warn($"{dir}: {Path.GetFileName(path)} and {twin} differ only in case; using {Path.GetFileName(path)}");
+        if (l.CaseTwins.TryGetValue(name, out var twins))
+            Warn($"{dir}: {Path.GetFileName(path)} and {string.Join(" and ", twins)} differ only in case; using {Path.GetFileName(path)}");
         return path;
     }
 
@@ -109,11 +115,16 @@ public sealed class GameData : IDisposable
         {
             if (Directory.Exists(dir))
             {
-                l = new(stamp, new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase));
+                l = new(stamp, System.Diagnostics.Stopwatch.GetTimestamp(), new(StringComparer.OrdinalIgnoreCase),
+                    new(StringComparer.OrdinalIgnoreCase));
                 // Sorted, so when two files differ only in case (possible on Linux) the same one wins on every run.
                 foreach (var f in Directory.EnumerateFiles(dir).OrderBy(f => f, StringComparer.Ordinal))
-                    if (!l.Files.TryAdd(Path.GetFileName(f), f))
-                        l.CaseTwins.TryAdd(Path.GetFileName(f), Path.GetFileName(f));
+                {
+                    var n = Path.GetFileName(f);
+                    if (l.Files.TryAdd(n, f)) continue;
+                    if (!l.CaseTwins.TryGetValue(n, out var twins)) l.CaseTwins[n] = twins = [];
+                    twins.Add(n);
+                }
             }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -154,7 +165,8 @@ public sealed class GameData : IDisposable
     public IStarfieldModGetter Open(string fileName) =>
         TryOpen(fileName) ?? throw new FileNotFoundException($"{fileName} is not in {DataDir}");
 
-    /// <summary>As <see cref="Open"/>, but returns null when the plugin (or one of its masters) isn't installed.</summary>
+    /// <summary>As <see cref="Open"/>, but returns null when the plugin (or one of its masters) isn't installed.
+    /// Masters opened before a missing or failing one stay open and in <see cref="LoadOrder"/>.</summary>
     public IStarfieldModGetter? TryOpen(string fileName)
     {
         if (opened.TryGetValue(fileName, out var m)) return m;
@@ -181,36 +193,48 @@ public sealed class GameData : IDisposable
 
     string? stringsCopies;
 
-    /// <summary>For a plugin found under another spelling (only on a case-sensitive disk): Mutagen looks for loose
-    /// string tables by the ModKey's name, which is the requested spelling, so they'd be missed. This copies the
-    /// plugin's tables from its Strings folder (any spelling) into a private temporary folder under the requested
-    /// name and returns that folder; null when the spelling is the same or there are no loose tables. The folder is
-    /// deleted on Dispose. Known limit: tables inside a BA2 archive named after a differently spelled plugin are
-    /// still looked for under the requested name.</summary>
+    int stringsCalls;
+
+    static readonly string[] TableExtensions = [".strings", ".dlstrings", ".ilstrings"];
+
+    /// <summary>For a plugin whose name or Strings folder is spelled differently on disk (only possible on a
+    /// case-sensitive disk): Mutagen looks for loose string tables as <c>Strings\&lt;ModKey name&gt;_lang.EXT</c>,
+    /// with the requested spelling, so they'd be missed. This copies the plugin's own tables (<c>name_lang.EXT</c>,
+    /// any spelling, from a Strings folder of any spelling) into a fresh private temporary folder under the requested
+    /// name and returns that folder; null when the exact names are in place or there are no loose tables. The
+    /// folders are deleted on Dispose. Known limits: tables inside a BA2 archive named after a differently spelled
+    /// plugin are still looked for under the requested name, and when the plugin and the Strings folder are spelled
+    /// exactly, differently spelled table files aren't looked for.</summary>
     string? StringsUnderRequestedName(string path, string fileName)
     {
         var diskStem = Path.GetFileNameWithoutExtension(path);
         var stem = Path.GetFileNameWithoutExtension(fileName);
-        if (diskStem == stem) return null;
+        var pluginDir = Path.GetDirectoryName(path)!;
+        if (diskStem == stem && Directory.Exists(Path.Combine(pluginDir, "Strings"))) return null;
         try
         {
-            var strings = Directory.EnumerateDirectories(Path.GetDirectoryName(path)!)
+            var strings = Directory.EnumerateDirectories(pluginDir)
                 .Where(d => string.Equals(Path.GetFileName(d), "Strings", StringComparison.OrdinalIgnoreCase))
                 .Order(StringComparer.Ordinal).FirstOrDefault();
             if (strings == null) return null;
+            // Only this plugin's own tables: name_lang.EXT with no further "_" part, so another plugin's tables
+            // (name_extra_lang.EXT, for a plugin called name_extra) aren't copied.
             var tables = Directory.EnumerateFiles(strings)
-                .Where(f => Path.GetFileName(f).StartsWith(diskStem + "_", StringComparison.OrdinalIgnoreCase))
-                .Order(StringComparer.Ordinal).ToList();
+                .Select(f => (File: f, Tail: Path.GetFileName(f).StartsWith(diskStem + "_", StringComparison.OrdinalIgnoreCase)
+                    ? Path.GetFileName(f)[(diskStem.Length + 1)..] : null))
+                .Where(t => t.Tail != null && TableExtensions.Contains(Path.GetExtension(t.Tail), StringComparer.OrdinalIgnoreCase)
+                    && Path.GetFileNameWithoutExtension(t.Tail) is { Length: > 0 } lang && !lang.Contains('_') && !lang.Contains('.'))
+                .OrderBy(t => t.File, StringComparer.Ordinal).ToList();
             if (tables.Count == 0) return null;
             stringsCopies ??= Directory.CreateTempSubdirectory("buildkit-strings-").FullName;
-            var dir = Path.Combine(stringsCopies, order.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            var dir = Path.Combine(stringsCopies, (stringsCalls++).ToString(System.Globalization.CultureInfo.InvariantCulture));
             Directory.CreateDirectory(dir);
-            foreach (var f in tables)
+            foreach (var (f, rest) in tables)
             {
                 // Name_lang.EXT, with the language in lower case and the extension in upper case, as Mutagen writes them.
-                var rest = Path.GetFileName(f)[(diskStem.Length + 1)..];
-                var target = $"{stem}_{Path.GetFileNameWithoutExtension(rest).ToLowerInvariant()}{Path.GetExtension(rest).ToUpperInvariant()}";
-                if (!File.Exists(Path.Combine(dir, target))) File.Copy(f, Path.Combine(dir, target));   // first in sorted order wins
+                var target = Path.Combine(dir,
+                    $"{stem}_{Path.GetFileNameWithoutExtension(rest)!.ToLowerInvariant()}{Path.GetExtension(rest)!.ToUpperInvariant()}");
+                if (!File.Exists(target)) File.Copy(f, target);   // first in sorted order wins (the folder is new)
             }
             return dir;
         }

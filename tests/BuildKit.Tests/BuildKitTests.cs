@@ -281,7 +281,7 @@ public class GameDataTests
         // The names GameData rebuilds under the requested spelling: Name_lang.EXT, language lower case, extension upper.
         var written = Directory.GetFiles(Path.Combine(data, "Strings")).Select(Path.GetFileName).ToList();
         Assert.NotEmpty(written);
-        Assert.All(written, n => Assert.Matches(@"^Loc_[a-z_]+\.[A-Z]+$", n));
+        Assert.All(written, n => Assert.Matches(@"^Loc_[a-z]+\.[A-Z]+$", n));
         // Lower-case the plugin and its string tables, as a case-sensitive disk might hold them.
         foreach (var f in Directory.GetFiles(data, "*", SearchOption.AllDirectories))
             if (Path.GetFileName(f).StartsWith("Loc", StringComparison.Ordinal))
@@ -295,6 +295,27 @@ public class GameDataTests
         Assert.NotNull(loc);
         Assert.Equal("Loc.esm", loc!.ModKey.FileName.String);
         Assert.Equal("Keyword text", loc.Keywords.Single().Name?.String);
+    }
+
+    [Fact]
+    public void ALocalizedPluginWithALowerCaseStringsFolderKeepsItsStrings()
+    {
+        using var t = new TempDir();
+        var data = t.Sub("Data");
+        Fixtures.WriteBase(data);
+        using (var writer = new GameData(data))
+        {
+            writer.Open("Base.esm");
+            var mod = Plugin.New("Loc.esm", PluginStyle.Full, "test", "localized", localized: true);
+            mod.Keywords.AddNew("L_Kw").Name = Localized.Text("Keyword text");
+            PluginWriter.Write(mod, data, writer, Fixtures.NoGapCheck);
+        }
+        Directory.Move(Path.Combine(data, "Strings"), Path.Combine(data, "tmp"));
+        Directory.Move(Path.Combine(data, "tmp"), Path.Combine(data, "strings"));
+        File.WriteAllBytes(Path.Combine(data, "strings", "Loc_extra_en.STRINGS"), [1, 2, 3]);   // another plugin's table
+        using var game = new GameData(data);
+        var loc = game.TryOpen("Loc.esm");
+        Assert.Equal("Keyword text", loc!.Keywords.Single().Name?.String);
     }
 
     [Fact]
