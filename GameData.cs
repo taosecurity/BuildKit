@@ -34,13 +34,69 @@ public sealed class GameData : IDisposable
         ExtraDirs = (extraDirs ?? []).Where(Directory.Exists).ToList();
     }
 
-    /// <summary>Where a plugin file is: the first extra folder that has it, else the Data folder; null if neither.</summary>
+    /// <summary>Notes about the folders, such as two files whose names differ only in case (possible on Linux). Each
+    /// note is also written once to standard error.</summary>
+    public List<string> Warnings { get; } = [];
+
+    /// <summary>Where a plugin file is: the first extra folder that has it, else the Data folder; null if neither.
+    /// The name is matched in any spelling (exact spelling first), because on Linux and Proton the file system is
+    /// case-sensitive while a load order or a plugin's master list may spell a name differently from the file.</summary>
     /// Throws ArgumentException when the name isn't a plain plugin file name (see <see cref="IsPlainPluginName"/>).
     public string? Locate(string fileName)
     {
         if (!IsPlainPluginName(fileName))
             throw new ArgumentException($"\"{Printable(fileName)}\" is not a plain plugin file name (Name.esm, .esp or .esl, no folder)", nameof(fileName));
-        return ExtraDirs.Append(DataDir).Select(d => Path.Combine(d, fileName)).FirstOrDefault(File.Exists);
+        foreach (var dir in ExtraDirs.Append(DataDir))
+            if (FindFile(dir, fileName) is string path) return path;
+        return null;
+    }
+
+    // Folder listings for the any-spelling match, one per folder. A listing is made again when the folder's
+    // modification time changes (adding, removing or renaming a file changes it), so a plugin written into a folder
+    // after this GameData was made is still found.
+    readonly Dictionary<string, (DateTime Stamp, Dictionary<string, string>? Files)> listings = new(StringComparer.Ordinal);
+
+    /// <summary>The file's path in the folder: exact spelling first (so Windows behaves exactly as before), then any
+    /// spelling; null if it isn't there.</summary>
+    string? FindFile(string dir, string name)
+    {
+        var exact = Path.Combine(dir, name);
+        if (File.Exists(exact)) return exact;
+        return Listing(dir)?.GetValueOrDefault(name);
+    }
+
+    Dictionary<string, string>? Listing(string dir)
+    {
+        DateTime stamp;
+        try { stamp = Directory.GetLastWriteTimeUtc(dir); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
+        if (listings.TryGetValue(dir, out var l) && l.Stamp == stamp) return l.Files;
+        Dictionary<string, string>? files = null;
+        try
+        {
+            if (Directory.Exists(dir))
+            {
+                files = new(StringComparer.OrdinalIgnoreCase);
+                // Sorted, so when two files differ only in case (possible on Linux) the same one wins on every run.
+                foreach (var f in Directory.EnumerateFiles(dir).OrderBy(f => f, StringComparer.Ordinal))
+                    if (!files.TryAdd(Path.GetFileName(f), f))
+                        Warn($"{dir}: {Path.GetFileName(files[Path.GetFileName(f)])} and {Path.GetFileName(f)} differ only in case; using the first");
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            files = null;
+            Warn($"{dir}: can't list the folder ({e.Message}); plugins are found only by their exact name");
+        }
+        listings[dir] = (stamp, files);
+        return files;
+    }
+
+    void Warn(string w)
+    {
+        if (Warnings.Contains(w)) return;
+        Warnings.Add(w);
+        Console.Error.WriteLine($"BuildKit: {w}");
     }
 
     /// <summary>True for a bare plugin file name such as <c>Starfield.esm</c>: no folder, drive, network path or "..",

@@ -226,6 +226,67 @@ public class GameDataTests
         Assert.Throws<FileNotFoundException>(() => game.Open("Missing.esm"));
         Assert.Throws<DirectoryNotFoundException>(() => new GameData(Path.Combine(t.Path, "nowhere")));
     }
+
+    // These two run on any system. On Windows the file system ignores case anyway; on Linux they exercise the
+    // folder listing that matches names in any spelling.
+    [Fact]
+    public void PluginsAreFoundInAnySpelling()
+    {
+        using var t = new TempDir();
+        Fixtures.WriteBase(t.Path);
+        File.Move(Path.Combine(t.Path, "Base.esm"), Path.Combine(t.Path, "tmp.bin"));
+        File.Move(Path.Combine(t.Path, "tmp.bin"), Path.Combine(t.Path, "base.ESM"));
+        Assert.Contains("base.ESM", Directory.GetFiles(t.Path).Select(Path.GetFileName));
+        using var game = new GameData(t.Path);
+        var found = game.Locate("Base.esm");
+        Assert.NotNull(found);
+        Assert.Equal("base.esm", Path.GetFileName(found)!.ToLowerInvariant());
+        Assert.NotNull(game.TryOpen("BASE.esm"));
+        Assert.Same(game.Open("Base.esm"), game.Open("base.ESM"));
+        Assert.Single(game.LoadOrder);
+        Assert.Equal(1f, game.Get<IGlobalGetter>("Shared").Data);
+    }
+
+    [Fact]
+    public void HeaderMasterSpelledDifferentlyFromItsFileIsOpened()
+    {
+        using var t = new TempDir();
+        Fixtures.WriteBase(t.Path);
+        Fixtures.WriteLight(t.Path);                       // Light.esm's header lists "Base.esm"
+        File.Move(Path.Combine(t.Path, "Base.esm"), Path.Combine(t.Path, "tmp.bin"));
+        File.Move(Path.Combine(t.Path, "tmp.bin"), Path.Combine(t.Path, "BASE.ESM"));
+        Assert.Equal(["Base.esm"], GameData.HeaderMasters(Path.Combine(t.Path, "Light.esm")));
+        using var game = new GameData(t.Path);
+        Assert.NotNull(game.TryOpen("Light.esm"));
+        Assert.Equal(2, game.LoadOrder.Count);
+        Assert.Equal(2f, game.Get<IGlobalGetter>("Shared").Data);   // Light.esm's override still wins
+        Assert.Empty(game.Warnings);
+    }
+
+    [Fact]
+    public void APluginWrittenAfterTheFirstLookupIsFound()
+    {
+        using var t = new TempDir();
+        Fixtures.WriteBase(t.Path);
+        using var game = new GameData(t.Path);
+        Assert.Null(game.Locate("Light.esm"));             // the folder is listed here, before Light.esm exists
+        Fixtures.WriteLight(t.Path);
+        File.Move(Path.Combine(t.Path, "Light.esm"), Path.Combine(t.Path, "tmp.bin"));
+        File.Move(Path.Combine(t.Path, "tmp.bin"), Path.Combine(t.Path, "light.esm"));
+        Assert.NotNull(game.Locate("Light.esm"));
+    }
+
+    [Fact]
+    public void PlainPluginNameRuleIsUnchanged()
+    {
+        Assert.True(GameData.IsPlainPluginName("Starfield.esm"));
+        Assert.True(GameData.IsPlainPluginName("starfield.ESM"));
+        Assert.False(GameData.IsPlainPluginName(@"\\server\share\x.esm"));
+        Assert.False(GameData.IsPlainPluginName("../x.esm"));
+        using var t = new TempDir();
+        using var game = new GameData(t.Path);
+        Assert.Throws<ArgumentException>(() => game.Locate("Data/Starfield.esm"));
+    }
 }
 
 public class PluginWriterTests

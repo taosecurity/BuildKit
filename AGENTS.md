@@ -26,7 +26,7 @@ In a new or existing .NET 9 (or later) console project:
 ```
 dotnet new console -n MyBuilder
 cd MyBuilder
-dotnet add package Taosecurity.Starfield.BuildKit --version 0.4.0
+dotnet add package Taosecurity.Starfield.BuildKit --version 0.4.1
 ```
 
 ## 4. Prove the install works
