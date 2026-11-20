@@ -7,10 +7,17 @@ A fix for Linux and Proton. Plugins built with 0.4.0 are unchanged.
 - `GameData.Locate` (and so `Open` and `TryOpen`) now finds a plugin in any spelling. Before, it asked for the exact
   name only, so on a case-sensitive file system a plugin was lost when a load order or another plugin's master list
   spelled it differently from the file (for example `Starfield.esm` against `starfield.ESM`). The exact spelling is
-  still tried first, so Windows behaves exactly as before. Each folder is listed once, sorted, and listed again when
-  its modification time changes, so a plugin written later is still found.
-- New `GameData.Warnings`: when two files in a folder differ only in case, the first in sorted order is used and a
-  warning is added there (and written once to standard error). `IsPlainPluginName` is unchanged.
+  still tried first, in every folder, before any other spelling, so Windows behaves exactly as before and an exact
+  match in the Data folder wins over a differently spelled copy in an extra folder. Each folder is listed once,
+  sorted, and listed again when its modification time changes or a name isn't in the listing, so a plugin written
+  later is still found, even on file systems that keep that time coarsely.
+- A plugin found under another spelling keeps the requested name as its ModKey, so master lists in built plugins
+  don't depend on how the disk spells the file.
+- New `GameData.Warnings` (read-only): when two files in a folder differ only in case and neither is spelled exactly
+  as requested, the first in sorted order is used and a warning is added there (and written once to standard
+  error). `IsPlainPluginName` is unchanged.
+- Known limit: the optional gap check (`mutagen-gap-check.py`, run by `PluginWriter`) still looks masters up by
+  their exact names.
 
 ## 0.4.0 (2026-11-18)
 

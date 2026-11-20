@@ -261,6 +261,41 @@ public class GameDataTests
         Assert.Equal(2, game.LoadOrder.Count);
         Assert.Equal(2f, game.Get<IGlobalGetter>("Shared").Data);   // Light.esm's override still wins
         Assert.Empty(game.Warnings);
+        // The master keeps the spelling it was asked for, whatever the disk calls it.
+        Assert.Equal("Base.esm", game.LoadOrder[0].ModKey.FileName.String);
+    }
+
+    [Fact]
+    public void AnExactSpellingInDataWinsOverADifferentlySpelledExtraCopy()
+    {
+        using var t = new TempDir();
+        var data = t.Sub("Data");
+        var stage = t.Sub("Stage");
+        Fixtures.WriteBase(data);
+        Fixtures.WriteBase(stage);
+        File.Move(Path.Combine(stage, "Base.esm"), Path.Combine(stage, "tmp.bin"));
+        File.Move(Path.Combine(stage, "tmp.bin"), Path.Combine(stage, "base.esm"));
+        using var game = new GameData(data, [stage]);
+        var found = game.Locate("Base.esm")!;
+        if (File.Exists(Path.Combine(stage, "Base.esm")))   // case-insensitive file system: the extra folder wins as before
+            Assert.Equal(stage, Path.GetDirectoryName(found));
+        else
+            Assert.Equal(Path.Combine(data, "Base.esm"), found);
+    }
+
+    [Fact]
+    public void AMissInAListingWithAnUnchangedStampListsTheFolderAgain()
+    {
+        using var t = new TempDir();
+        Fixtures.WriteBase(t.Path);
+        using var game = new GameData(t.Path);
+        var stamp = Directory.GetLastWriteTimeUtc(t.Path);
+        Assert.Null(game.Locate("Light.esm"));
+        Fixtures.WriteLight(t.Path);
+        File.Move(Path.Combine(t.Path, "Light.esm"), Path.Combine(t.Path, "tmp.bin"));
+        File.Move(Path.Combine(t.Path, "tmp.bin"), Path.Combine(t.Path, "light.esm"));
+        Directory.SetLastWriteTimeUtc(t.Path, stamp);      // as on a file system with a coarse folder time
+        Assert.NotNull(game.Locate("Light.esm"));
     }
 
     [Fact]

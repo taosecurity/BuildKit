@@ -34,43 +34,55 @@ public sealed class GameData : IDisposable
         ExtraDirs = (extraDirs ?? []).Where(Directory.Exists).ToList();
     }
 
+    readonly List<string> warnings = [];
+    readonly HashSet<string> warned = new(StringComparer.Ordinal);
+
     /// <summary>Notes about the folders, such as two files whose names differ only in case (possible on Linux). Each
     /// note is also written once to standard error.</summary>
-    public List<string> Warnings { get; } = [];
+    public IReadOnlyList<string> Warnings => warnings;
 
     /// <summary>Where a plugin file is: the first extra folder that has it, else the Data folder; null if neither.
-    /// The name is matched in any spelling (exact spelling first), because on Linux and Proton the file system is
-    /// case-sensitive while a load order or a plugin's master list may spell a name differently from the file.</summary>
-    /// Throws ArgumentException when the name isn't a plain plugin file name (see <see cref="IsPlainPluginName"/>).
+    /// The exact spelling is looked for in every folder first (so Windows behaves exactly as before, and an exact
+    /// match in the Data folder wins over a differently spelled copy in an extra folder). Then the name is matched in
+    /// any spelling, because on Linux and Proton the file system is case-sensitive while a load order or a plugin's
+    /// master list may spell a name differently from the file. When a folder holds the exact spelling, that file is
+    /// used even if another file there differs from it only in case.</summary>
+    /// <exception cref="ArgumentException">The name isn't a plain plugin file name (see <see cref="IsPlainPluginName"/>).</exception>
     public string? Locate(string fileName)
     {
         if (!IsPlainPluginName(fileName))
             throw new ArgumentException($"\"{Printable(fileName)}\" is not a plain plugin file name (Name.esm, .esp or .esl, no folder)", nameof(fileName));
-        foreach (var dir in ExtraDirs.Append(DataDir))
-            if (FindFile(dir, fileName) is string path) return path;
+        var dirs = ExtraDirs.Append(DataDir).ToList();
+        foreach (var dir in dirs)
+        {
+            var exact = Path.Combine(dir, fileName);
+            if (File.Exists(exact)) return exact;
+        }
+        foreach (var dir in dirs)
+            if (AnySpelling(dir, fileName) is string path) return path;
         return null;
     }
 
     // Folder listings for the any-spelling match, one per folder. A listing is made again when the folder's
-    // modification time changes (adding, removing or renaming a file changes it), so a plugin written into a folder
-    // after this GameData was made is still found.
-    readonly Dictionary<string, (DateTime Stamp, Dictionary<string, string>? Files)> listings = new(StringComparer.Ordinal);
+    // modification time changes (adding, removing or renaming a file changes it), and once more on a miss, because
+    // some file systems (FAT, exFAT, network shares) keep that time too coarsely to show a file written just now.
+    readonly Dictionary<string, (DateTime Stamp, Dictionary<string, string> Files)> listings = new(StringComparer.Ordinal);
 
-    /// <summary>The file's path in the folder: exact spelling first (so Windows behaves exactly as before), then any
-    /// spelling; null if it isn't there.</summary>
-    string? FindFile(string dir, string name)
-    {
-        var exact = Path.Combine(dir, name);
-        if (File.Exists(exact)) return exact;
-        return Listing(dir)?.GetValueOrDefault(name);
-    }
-
-    Dictionary<string, string>? Listing(string dir)
+    /// <summary>The path of a file in the folder whose name matches in any spelling; null if there is none.</summary>
+    string? AnySpelling(string dir, string name)
     {
         DateTime stamp;
         try { stamp = Directory.GetLastWriteTimeUtc(dir); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
-        if (listings.TryGetValue(dir, out var l) && l.Stamp == stamp) return l.Files;
+        if (listings.TryGetValue(dir, out var l) && l.Stamp == stamp && l.Files.TryGetValue(name, out var cached))
+            return cached;
+        return List(dir, stamp)?.GetValueOrDefault(name);   // new, changed, or a miss in the cached listing
+    }
+
+    /// <summary>Lists the folder and keeps the listing; null (and nothing kept, so the next lookup tries again) when
+    /// the folder can't be listed.</summary>
+    Dictionary<string, string>? List(string dir, DateTime stamp)
+    {
         Dictionary<string, string>? files = null;
         try
         {
@@ -85,17 +97,18 @@ public sealed class GameData : IDisposable
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            files = null;
             Warn($"{dir}: can't list the folder ({e.Message}); plugins are found only by their exact name");
+            files = null;
         }
-        listings[dir] = (stamp, files);
+        if (files == null) listings.Remove(dir);
+        else listings[dir] = (stamp, files);
         return files;
     }
 
     void Warn(string w)
     {
-        if (Warnings.Contains(w)) return;
-        Warnings.Add(w);
+        if (!warned.Add(w)) return;
+        warnings.Add(w);
         Console.Error.WriteLine($"BuildKit: {w}");
     }
 
@@ -129,7 +142,10 @@ public sealed class GameData : IDisposable
         if (!opening.Add(fileName)) throw new InvalidOperationException($"{fileName} is its own master");
         foreach (var master in HeaderMasters(path))
             if (TryOpen(master) == null) { opening.Remove(fileName); return null; }
-        var mod = StarfieldMod.CreateFromBinaryOverlay(path, StarfieldRelease.Starfield, ReadParams());
+        // The ModKey takes the requested spelling, not the file's, as it did when Windows opened the file by that
+        // name, so master lists in built plugins don't depend on how a case-sensitive disk spells the file.
+        var mod = StarfieldMod.CreateFromBinaryOverlay(new ModPath(ModKey.FromFileName(fileName), path),
+            StarfieldRelease.Starfield, ReadParams());
         opening.Remove(fileName);
         order.Add(mod);
         opened[fileName] = mod;
