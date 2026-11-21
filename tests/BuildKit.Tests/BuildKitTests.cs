@@ -2,6 +2,7 @@ using Mutagen.Bethesda;
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Plugins.Binary.Parameters;
 using Mutagen.Bethesda.Starfield;
+using Mutagen.Bethesda.Strings;
 using Xunit;
 
 namespace BuildKit.Tests;
@@ -87,6 +88,26 @@ public class PluginTests
     {
         var t = Localized.Text("hello");
         Assert.All(Localized.Languages, l => Assert.True(t.TryLookup(l, out var s) && s == "hello"));
+    }
+
+    [Fact]
+    public void LocalizedForFollowsThePluginAndTheTextFunction()
+    {
+        var plain = Plugin.New("Plain.esm", PluginStyle.Light, "test", "plain");
+        var p = Localized.For(plain, "hello");
+        Assert.Equal(1, p.NumLanguages);
+        Assert.Equal("hello", p.String);
+
+        var loc = Plugin.New("Loc.esm", PluginStyle.Light, "test", "localized", localized: true);
+        var l = Localized.For(loc, "hello");
+        Assert.Equal(Localized.Languages.Length, l.NumLanguages);
+        Assert.All(Localized.Languages, lang => Assert.True(l.TryLookup(lang, out var s) && s == "hello"));
+
+        // The builder's own text: function wins on both kinds of plugin.
+        TranslatedString Shout(string s) => s.ToUpperInvariant();
+        Assert.Equal("HELLO", Localized.For(plain, "hello", Shout).String);
+        Assert.Equal("HELLO", Localized.For(loc, "hello", text: Shout).String);
+        Assert.Equal(1, Localized.For(loc, "hello", Shout).NumLanguages);
     }
 }
 
@@ -295,6 +316,52 @@ public class GameDataTests
         Assert.NotNull(loc);
         Assert.Equal("Loc.esm", loc!.ModKey.FileName.String);
         Assert.Equal("Keyword text", loc.Keywords.Single().Name?.String);
+    }
+
+    [Theory]
+    [InlineData("loc.esm", "loc - Main.ba2")]    // plugin and archive both spelled differently from the request
+    [InlineData("Loc.esm", "LOC - Main.ba2")]    // plugin exact, archive spelled differently
+    public void ALocalizedPluginWithItsStringsInABa2KeepsThemInAnySpelling(string diskPlugin, string archive)
+    {
+        using var t = new TempDir();
+        var data = t.Sub("Data");
+        Fixtures.WriteBase(data);
+        using (var writer = new GameData(data))
+        {
+            writer.Open("Base.esm");
+            var mod = Plugin.New("Loc.esm", PluginStyle.Full, "test", "localized", localized: true);
+            mod.Keywords.AddNew("L_Kw").Name = Localized.Text("Keyword text");
+            PluginWriter.Write(mod, data, writer, Fixtures.NoGapCheck);
+        }
+        // Pack the loose string tables into a BA2, as a released mod ships them, under lower-case names, and remove
+        // the loose copies so only the archive can supply the text.
+        var strings = Path.Combine(data, "Strings");
+        var tables = Directory.GetFiles(strings).ToDictionary(
+            f => @"strings\" + Path.GetFileName(f).ToLowerInvariant(), File.ReadAllBytes);
+        Assert.NotEmpty(tables);
+        Directory.Delete(strings, true);
+        Fixtures.WriteBa2(Path.Combine(data, archive), tables);
+        if (diskPlugin != "Loc.esm")
+        {
+            File.Move(Path.Combine(data, "Loc.esm"), Path.Combine(data, "tmp.esm"));
+            File.Move(Path.Combine(data, "tmp.esm"), Path.Combine(data, diskPlugin));
+        }
+        // Mutagen 0.54.4 reads Plugins.txt from %LocalAppData% to order archives, and throws when that variable is
+        // unset (Linux outside Proton). Give it an empty folder there so the test runs on Linux too.
+        var localAppData = Environment.GetEnvironmentVariable("LocalAppData");
+        if (localAppData == null) Environment.SetEnvironmentVariable("LocalAppData", t.Sub("LocalAppData"));
+        try
+        {
+            using var game = new GameData(data);
+            var loc = game.TryOpen("Loc.esm");
+            Assert.NotNull(loc);
+            Assert.Equal("Loc.esm", loc!.ModKey.FileName.String);
+            Assert.Equal("Keyword text", loc.Keywords.Single().Name?.String);
+        }
+        finally
+        {
+            if (localAppData == null) Environment.SetEnvironmentVariable("LocalAppData", null);
+        }
     }
 
     [Fact]

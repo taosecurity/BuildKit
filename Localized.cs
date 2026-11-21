@@ -25,7 +25,8 @@ public static class Localized
 
     /// <summary>Text for a record in <paramref name="mod"/>: the builder's own <paramref name="text"/> function if
     /// given, otherwise all nine languages on a localized plugin (so no language shows a missing string) and plain
-    /// text on any other plugin.</summary>
-    internal static TranslatedString For(StarfieldMod mod, string s, Func<string, TranslatedString>? text) =>
+    /// text on any other plugin. Use it for the names and descriptions of your own records, so they follow the same
+    /// rule as <see cref="GameplayOptions"/> and <see cref="Messages"/>.</summary>
+    public static TranslatedString For(StarfieldMod mod, string s, Func<string, TranslatedString>? text = null) =>
         text != null ? text(s) : mod.UsingLocalization ? Text(s) : s;
 }

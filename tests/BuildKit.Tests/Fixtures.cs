@@ -55,5 +55,32 @@ public static class Fixtures
             },
         });
 
+    /// <summary>Writes an uncompressed general (GNRL) BA2, version 1, holding <paramref name="files"/> (archive path
+    /// to bytes). Enough for Mutagen's reader; the name hashes are left at 0 because Mutagen reads names from the
+    /// name table.</summary>
+    public static void WriteBa2(string path, IReadOnlyDictionary<string, byte[]> files)
+    {
+        const int headerSize = 24, entrySize = 36;
+        var entries = files.ToList();
+        var dataStart = headerSize + entrySize * entries.Count;
+        var nameTable = dataStart + entries.Sum(e => (long)e.Value.Length);
+        using var w = new BinaryWriter(File.Create(path));
+        w.Write("BTDX"u8); w.Write(1u); w.Write("GNRL"u8); w.Write((uint)entries.Count); w.Write((ulong)nameTable);
+        long offset = dataStart;
+        foreach (var (name, bytes) in entries)
+        {
+            var ext = System.Text.Encoding.ASCII.GetBytes((System.IO.Path.GetExtension(name).TrimStart('.') + "\0\0\0\0")[..4]);
+            w.Write(0u); w.Write(ext); w.Write(0u); w.Write(0u);   // name hash, extension, folder hash, flags
+            w.Write((ulong)offset); w.Write(0u); w.Write((uint)bytes.Length); w.Write(0xBAADF00Du);   // packed 0 = stored
+            offset += bytes.Length;
+        }
+        foreach (var (_, bytes) in entries) w.Write(bytes);
+        foreach (var (name, _) in entries)
+        {
+            var n = System.Text.Encoding.UTF8.GetBytes(name);
+            w.Write((short)n.Length); w.Write(n);
+        }
+    }
+
     public static IStarfieldModDisposableGetter Read(GameData game, string path) => game.OpenPlugin(path);
 }

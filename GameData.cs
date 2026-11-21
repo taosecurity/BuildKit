@@ -202,9 +202,9 @@ public sealed class GameData : IDisposable
     /// with the requested spelling, so they'd be missed. This copies the plugin's own tables (<c>name_lang.EXT</c>,
     /// any spelling, from a Strings folder of any spelling) into a fresh private temporary folder under the requested
     /// name and returns that folder; null when the exact names are in place or there are no loose tables. The
-    /// folders are deleted on Dispose. Known limits: tables inside a BA2 archive named after a differently spelled
-    /// plugin are still looked for under the requested name, and when the plugin and the Strings folder are spelled
-    /// exactly, differently spelled table files aren't looked for.</summary>
+    /// folders are deleted on Dispose. Tables inside a BA2 archive need nothing here: Mutagen matches the archive's
+    /// name and the table names inside it without regard to case (tested on Linux). Known limit: when the plugin and
+    /// the Strings folder are spelled exactly, differently spelled table files aren't looked for.</summary>
     string? StringsUnderRequestedName(string path, string fileName)
     {
         var diskStem = Path.GetFileNameWithoutExtension(path);

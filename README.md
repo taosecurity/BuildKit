@@ -44,7 +44,7 @@ Console.WriteLine(IdLock.Apply(mod, "ids.lock.json"));   // commit ids.lock.json
 PluginWriter.Write(mod, "out", game);                    // writes out\MyMod.esm
 ```
 
-`dotnet run` printed this with BuildKit 0.4.1, and wrote an 802-byte `out\MyMod.esm`:
+`dotnet run` printed this with BuildKit 0.4.2, and wrote an 802-byte `out\MyMod.esm`:
 
 ```
 > dotnet run
@@ -117,7 +117,7 @@ Mutagen version to the same project.
 | `DialogTopics` | `FixSubtypeNames(mod)` fills a blank SubtypeName (SNAM) on every dialogue topic with the code that matches its Subtype, as vanilla topics have. `PluginWriter.Write` calls it for you. |
 | `IdLock` | `Apply(mod, lockPath)` keeps every own record's FormID the same from build to build, using a JSON file of EditorID to FormID. New records get the next free ID. The build stops if a locked record disappears, if two records share an EditorID, or if a record has no EditorID. `update: false` only checks. |
 | `GameplayOptions` | `Debug(...)` makes a "Show Debug Messages (PC only)" option, off by default, for Settings > Gameplay Options. `Bool(...)` makes other on/off options, and `Group(...)` makes the mod's own options group. Create the options first and the group last. |
-| `Localized` | `Text(s)` gives the same text in all nine languages the game ships, for localized plugins. `GameplayOptions` and `Messages` use it by default on a localized plugin; pass your own `text:` function to change that. |
+| `Localized` | `Text(s)` gives the same text in all nine languages the game ships, for localized plugins. `For(mod, s, text:)` picks the right kind of text for your own records: your `text:` function if you pass one, otherwise all nine languages on a localized plugin and plain text on any other. `GameplayOptions` and `Messages` use `For`, so pass your own `text:` function to change what they write. |
 | `Messages` | `Hud(mod, editorId, text, seconds)` makes a top-left HUD line, and `Box(mod, editorId, text, title, buttons, ownerQuest)` makes a message box. Both copy the shape of vanilla messages. Show them in Papyrus with `Message.Show()`, which works on Xbox and PlayStation. `Debug.Notification` and `Debug.MessageBox` do nothing on consoles (see below). |
 
 ### On-screen text that works on Xbox and PlayStation
@@ -153,6 +153,15 @@ per case. A `%` in the text starts a number slot, so don't put a literal percent
 On a localized plugin, `Messages` and `GameplayOptions` put their text in all nine languages unless you pass your
 own `text:` function. They decide this when each record is made, so make the plugin with
 `Plugin.New(..., localized: true)` rather than turning localization on later.
+
+Your own records can follow the same rule with `Localized.For`:
+
+```csharp
+var kw = mod.Keywords.AddNew("MM_Keyword");
+kw.Name = Localized.For(mod, "Shiny");                                 // nine languages if localized, else plain text
+var weapon = mod.Weapons.AddNew("MM_Weapon");
+weapon.Name = Localized.For(mod, "Laser", text: s => s.ToUpperInvariant());   // your own function wins
+```
 
 ### Write options
 

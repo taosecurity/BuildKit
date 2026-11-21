@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.4.2 (2026-11-20)
+
+### What's new
+
+`Localized.For` is now public, so a builder can give its own records the same kind of text that `Messages` and `GameplayOptions` write: all nine languages on a localized plugin and plain text on any other, or the builder's own `text:` function when it passes one.
+
+Plugins built with 0.4.1 are unchanged when they're built again with 0.4.2.
+
+### Example
+
+The README's `Localized.For` lines, run once on a plain plugin and once on a localized one, with each name's language count:
+
+    > dotnet run
+    localized=False: 1 Shiny, 1 LASER
+    localized=True: 9 Shiny, 1 LASER
+
+### Changes
+
+- `Localized.For(mod, s, text:)` is public, and its `text:` argument is optional. A test covers plain text on a normal plugin, nine languages on a localized one, and a builder's own function on both.
+- The optional gap check (`mutagen-gap-check.py`, which `PluginWriter` runs when it can find it) now finds a master whatever its capitalization. The exact spelling is still tried first in every folder, so an exact match in the Data folder wins over a differently spelled copy in the masters folder. It has its own tests.
+- String tables inside a BA2 archive were listed under "Not yet" in 0.4.1. A new test shows they were never a problem: Mutagen matches the archive's name and the table names inside it without regard to capitalization, so a localized plugin spelled differently on disk keeps its text from its archive. The test passes on Windows and on Linux.
+
+### Not yet
+
+- On Linux outside Proton, Mutagen 0.54.4 can't read string tables from BA2 archives unless the `LocalAppData` environment variable is set, because it looks for the game's Plugins.txt there to order the archives. This affects any localized plugin whose text is in an archive, Starfield.esm included. Setting `LocalAppData` to any folder works around it.
+
+### Download
+
+`dotnet add package Taosecurity.Starfield.BuildKit --version 0.4.2`
+
 ## 0.4.1 (2026-11-20)
 
 ### What's new

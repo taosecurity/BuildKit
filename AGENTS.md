@@ -26,7 +26,7 @@ In a new or existing .NET 9 (or later) console project:
 ```
 dotnet new console -n MyBuilder
 cd MyBuilder
-dotnet add package Taosecurity.Starfield.BuildKit --version 0.4.1
+dotnet add package Taosecurity.Starfield.BuildKit --version 0.4.2
 ```
 
 ## 4. Prove the install works
@@ -64,7 +64,9 @@ isn't part of the package, and the plugin is written either way. No game files a
    literal `%` in message text (it starts a number slot; write "percent"). README.md, "On-screen text that works on
    Xbox and PlayStation", has the Papyrus side.
 6. Localized plugin: make it with `Plugin.New(..., localized: true)`. `Messages` and `GameplayOptions` then put
-   their text in all nine languages by default; pass `text:` only to change that.
+   their text in all nine languages by default; pass `text:` only to change that. For the names and descriptions
+   of your own records, use `Localized.For(mod, "Text")`: all nine languages on a localized plugin, plain text on
+   any other, or your own function with `Localized.For(mod, "Text", text: myFunction)`.
 
 ## 6. Inputs, outputs, exit codes, log
 
