@@ -108,6 +108,11 @@ public class PluginTests
         Assert.Equal("HELLO", Localized.For(plain, "hello", Shout).String);
         Assert.Equal("HELLO", Localized.For(loc, "hello", text: Shout).String);
         Assert.Equal(1, Localized.For(loc, "hello", Shout).NumLanguages);
+
+        // A read-only getter works too, and picks the same branch from its own UsingLocalization.
+        IStarfieldModGetter getter = loc;
+        Assert.Equal(Localized.Languages.Length, Localized.For(getter, "hello").NumLanguages);
+        Assert.Equal(1, Localized.For((IStarfieldModGetter)plain, "hello").NumLanguages);
     }
 }
 
@@ -362,7 +367,7 @@ public class GameDataTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable("LocalAppData", localAppData);   // null or empty included
+            Environment.SetEnvironmentVariable("LocalAppData", localAppData);   // an empty value comes back unset, which Mutagen treats the same
         }
     }
 
