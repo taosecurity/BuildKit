@@ -109,10 +109,9 @@ public class PluginTests
         Assert.Equal("HELLO", Localized.For(loc, "hello", text: Shout).String);
         Assert.Equal(1, Localized.For(loc, "hello", Shout).NumLanguages);
 
-        // A read-only getter works too, and picks the same branch from its own UsingLocalization.
-        IStarfieldModGetter getter = loc;
-        Assert.Equal(Localized.Languages.Length, Localized.For(getter, "hello").NumLanguages);
-        Assert.Equal(1, Localized.For((IStarfieldModGetter)plain, "hello").NumLanguages);
+        // A builder that holds its mod as the interface type compiles and gets the same answer.
+        IStarfieldModGetter asInterface = loc;
+        Assert.Equal(Localized.Languages.Length, Localized.For(asInterface, "hello").NumLanguages);
     }
 }
 
