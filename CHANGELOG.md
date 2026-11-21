@@ -18,9 +18,9 @@ The README's `Localized.For` lines, run once on a plain plugin and once on a loc
 
 ### Changes
 
-- `Localized.For(mod, s, text:)` is public, and its `text:` argument is optional. A test covers plain text on a normal plugin, nine languages on a localized one, and a builder's own function on both.
+- `Localized.For(mod, s, text:)` is public, and its `text:` argument is optional. It takes any `IStarfieldModGetter`, so a builder that holds a plugin through that interface can call it too. A test covers plain text on a normal plugin, nine languages on a localized one, and a builder's own function on both.
 - The optional gap check (`mutagen-gap-check.py`, which `PluginWriter` runs when it can find it) now finds a master whatever its capitalization. The exact spelling is still tried first in every folder, so an exact match in the Data folder wins over a differently spelled copy in the masters folder. It has its own tests.
-- String tables inside a BA2 archive were listed under "Not yet" in 0.4.1. A new test shows they were never a problem: Mutagen matches the archive's name and the table names inside it without regard to capitalization, so a localized plugin spelled differently on disk keeps its text from its archive. The test passes on Windows and on Linux.
+- String tables inside a BA2 archive were listed under "Not yet" in 0.4.1. A new test shows they were never a problem: Mutagen matches the archive's name and the table names inside it without regard to capitalization, so a localized plugin spelled differently on disk keeps its text from its archive. The test passes on Windows and on Linux. The proof for any capitalization comes from the Linux run, because Windows finds files whatever their capitalization anyway.
 
 ### Not yet
 

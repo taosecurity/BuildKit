@@ -347,9 +347,11 @@ public class GameDataTests
             File.Move(Path.Combine(data, "tmp.esm"), Path.Combine(data, diskPlugin));
         }
         // Mutagen 0.54.4 reads Plugins.txt from %LocalAppData% to order archives, and throws when that variable is
-        // unset (Linux outside Proton). Give it an empty folder there so the test runs on Linux too.
+        // unset or empty (Linux outside Proton). Always point it at an empty folder of the test's own, so the result
+        // never depends on the account's real Plugins.txt, and put the original value back afterwards. The assembly
+        // turns off test parallelization (BethesdaFormIdTests.cs), so no other test sees the change.
         var localAppData = Environment.GetEnvironmentVariable("LocalAppData");
-        if (localAppData == null) Environment.SetEnvironmentVariable("LocalAppData", t.Sub("LocalAppData"));
+        Environment.SetEnvironmentVariable("LocalAppData", t.Sub("LocalAppData"));
         try
         {
             using var game = new GameData(data);
@@ -360,7 +362,7 @@ public class GameDataTests
         }
         finally
         {
-            if (localAppData == null) Environment.SetEnvironmentVariable("LocalAppData", null);
+            Environment.SetEnvironmentVariable("LocalAppData", localAppData);   // null or empty included
         }
     }
 
