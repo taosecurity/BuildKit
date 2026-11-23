@@ -200,7 +200,7 @@ public static class PluginWriter
         {
             var exe = ResolveSfModCheck(options.GapCheckExe, "WriteOptions.GapCheckExe");
             if (exe == null)
-                Console.Error.WriteLine($"  gap check: NOT RUN ({GapCheckExeName} was not found). Install it (dotnet tool install -g {GapCheckExeName}, or the release from github.com/taosecurity/sf-mod-check) so it is on PATH, or set {GapCheckExeVariable} or WriteOptions.GapCheckExe to its path.");
+                Console.Error.WriteLine($"  gap check: NOT RUN ({GapCheckExeName} was not found). {InstallHint}, or set {GapCheckExeVariable} or WriteOptions.GapCheckExe to its path.");
             else
             {
                 var exit = GapCheck(outPath, game.DataDir, options.GapCheckMastersDir, exe);
@@ -213,13 +213,16 @@ public static class PluginWriter
         return outPath;
     }
 
+    // sf-mod-check is not on nuget.org: both ways to install it start from its GitHub releases page.
+    const string InstallHint = "Get it from github.com/taosecurity/sf-mod-check/releases (unzip the exe and put its folder on PATH, or install the .nupkg as a .NET global tool)";
+
     /// <summary>Runs `sf-mod-check gap` on a plugin; prints its report and returns its exit code (0 ok, 1 errors,
     /// 2 could not check). exe = the full path of the sf-mod-check program (null = the BUILDKIT_SFMODCHECK variable, else
     /// PATH, as <see cref="ResolveSfModCheck"/>; throws when none is found).</summary>
     public static int GapCheck(string pluginPath, string dataDir, string? mastersDir = null, string? exe = null)
     {
         exe = ResolveSfModCheck(exe, "exe") ?? throw new FileNotFoundException(
-            $"{GapCheckExeName} was not found on PATH. Install it (dotnet tool install -g {GapCheckExeName}), or set {GapCheckExeVariable} to its full path");
+            $"{GapCheckExeName} was not found on PATH. {InstallHint}, or set {GapCheckExeVariable} to its full path");
         Console.WriteLine($"  gap check: running {exe} gap");
         var psi = new ProcessStartInfo(exe) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var a in new[] { "gap", Path.GetFullPath(pluginPath), "--data", dataDir }) psi.ArgumentList.Add(a);

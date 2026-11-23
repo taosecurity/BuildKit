@@ -777,7 +777,8 @@ public class GapCheckTests
         var text = err.ToString();
         Assert.Contains("NOT RUN", text);
         Assert.Contains(PluginWriter.GapCheckExeVariable, text);
-        Assert.Contains("dotnet tool install", text);
+        Assert.Contains("sf-mod-check/releases", text);
+        Assert.DoesNotContain("dotnet tool install", text);
     }
 }
 

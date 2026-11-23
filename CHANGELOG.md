@@ -26,13 +26,13 @@ This is the output of the README's builder, run with BuildKit 0.5.0 and sf-mod-c
 
 Without sf-mod-check, the same build prints this instead of the five `gap check:` lines, and still writes the plugin:
 
-      gap check: NOT RUN (sf-mod-check was not found). Install it (dotnet tool install -g sf-mod-check, or the release from github.com/taosecurity/sf-mod-check) so it is on PATH, or set BUILDKIT_SFMODCHECK or WriteOptions.GapCheckExe to its path.
+      gap check: NOT RUN (sf-mod-check was not found). Get it from github.com/taosecurity/sf-mod-check/releases (unzip the exe and put its folder on PATH, or install the .nupkg as a .NET global tool), or set BUILDKIT_SFMODCHECK or WriteOptions.GapCheckExe to its path.
 
 ### Changes
 
 - The gap check looks for sf-mod-check in `WriteOptions.GapCheckExe`, then the `BUILDKIT_SFMODCHECK` environment variable, then PATH (on Windows, only `sf-mod-check.exe` is found on PATH). A path named by the option or the variable must be a full path to an existing program, or the build throws naming the fix. `PluginWriter.GapCheck` called directly reads the variable and PATH the same way, and `PluginWriter.ResolveSfModCheck` is the public form of that lookup. It passes the Data folder as `--data` and `GapCheckMastersDir` as `--masters-dir`, and any nonzero exit throws when `FailOnGapErrors` is on. Eight new tests cover it, most with a stub exe.
 - Breaking for builders that used the old gap check: `WriteOptions.GapCheckScript`, `PluginWriter.GapCheckScriptName` and `PluginWriter.FindPython` are gone. Use `GapCheckExe` instead of `GapCheckScript`. The fourth argument of `PluginWriter.GapCheck` is now `exe`, the sf-mod-check program, instead of `script`; a `.py` path there or in `GapCheckExe` throws an error that says so. The gap check no longer looks in `BUILDKIT_TOOLS` for a Python script or for Python itself, and BuildKit no longer runs Python. `PluginWriter.TryFindTool` and `FindTool` still use `BUILDKIT_TOOLS` for a builder's own helper files.
-- When the gap check exits 1 the error says it found errors (and that an sf-mod-check older than 0.15.0 can also cause it when no errors are listed); any other nonzero exit says it could not check (a missing master, or an sf-mod-check older than 0.15.0).
+- When the gap check exits 1 the error says it found errors; any other nonzero exit says it could not check (a missing master, or an sf-mod-check older than 0.15.0).
 - `GameplayOptions.Bool` and `GameplayOptions.Debug` write the two value rows (`VOVS`, `VORV`, `RESN`, `VORN`: DISABLE at 0, ENABLE at 1) that the Creation Kit writes on every on/off option, and no `GPOD` (the Creation Kit writes that only on sliders; all of Bethesda's own options are sliders). A byte compare against a Creation Kit-made option from another author shows the same eight fields. These fixed values never go through a builder's `text:` function. Three new tests check the written fields.
 
 ### Not yet

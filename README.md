@@ -218,8 +218,9 @@ BuildKit looks for sf-mod-check in this order:
   picked). On Windows only `sf-mod-check.exe` is found there.
 
 A path named by the option or the variable must be a full path to an existing program, or the build throws.
-`PluginWriter.GapCheck`, called on its own, uses the variable and PATH the same way. Install it with
-`dotnet tool install -g sf-mod-check`, or unpack the release zip and put its folder on PATH.
+`PluginWriter.GapCheck`, called on its own, uses the variable and PATH the same way. Get sf-mod-check from its
+[releases page](https://github.com/taosecurity/sf-mod-check/releases): unzip the stand-alone exe and put its folder on
+PATH, or install the `.nupkg` as a .NET global tool the way sf-mod-check's README shows (it is not on nuget.org).
 
 If it finds none, it prints one line on standard error naming the fix (`gap check: NOT RUN (sf-mod-check was not
 found). Install it ...`) and the build still succeeds, so a missing check is never silent. When it runs, BuildKit
