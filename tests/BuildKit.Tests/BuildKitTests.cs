@@ -744,6 +744,13 @@ public class GapCheckTests
         File.WriteAllText(py, "");
         var pyEx = Assert.Throws<ArgumentException>(() => WriteWith(t, new WriteOptions { GapCheckExe = py }));
         Assert.Contains("Python script", pyEx.Message);
+        // A moved or deleted old script still gets the 0.5.0 hint, not a plain "does not exist".
+        var gone = Path.Combine(t.Sub("old"), "gone", "mutagen-gap-check.py");
+        Assert.Contains("Python script", Assert.Throws<ArgumentException>(() => PluginWriter.ResolveSfModCheck(gone)).Message);
+        // A path pasted with quotes (Explorer's "Copy as path") in the option is read like the variable.
+        var exe = Path.Combine(t.Sub("q x"), "sf-mod-check.exe");
+        File.WriteAllText(exe, "");
+        Assert.Equal(exe, PluginWriter.ResolveSfModCheck($" \"{exe}\" "));
     }
 
     [Fact]

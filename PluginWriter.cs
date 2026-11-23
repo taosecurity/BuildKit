@@ -206,7 +206,7 @@ public static class PluginWriter
                 var exit = GapCheck(outPath, game.DataDir, options.GapCheckMastersDir, exe);
                 if (exit != 0 && options.FailOnGapErrors)
                     throw new Exception(exit == 1
-                        ? $"{GapCheckExeName} gap found errors in {outPath} (see above); fix them before handing the plugin over. If the output above doesn't list errors, {exe} may be older than 0.15.0 (no gap command): update it"
+                        ? $"{GapCheckExeName} gap found errors in {outPath} (see above); fix them before handing the plugin over"
                         : $"{GapCheckExeName} gap could not check {outPath} (exit {exit}, see above): a missing master, or an {GapCheckExeName} older than 0.15.0 with no gap command?");
             }
         }
@@ -244,14 +244,15 @@ public static class PluginWriter
         {
             var env = Environment.GetEnvironmentVariable(GapCheckExeVariable);
             if (string.IsNullOrWhiteSpace(env)) return FindSfModCheck();
-            (exe, source) = (env.Trim().Trim('"'), GapCheckExeVariable);
+            (exe, source) = (env, GapCheckExeVariable);
         }
+        exe = exe.Trim().Trim('"').Trim();
+        if (Path.GetExtension(exe).Equals(".py", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"{source} names the Python script {exe}: BuildKit 0.5.0 runs {GapCheckExeName} instead; name its exe");
         if (!Path.IsPathFullyQualified(exe))
             throw new ArgumentException($"{source} is {exe}: give the full path of {GapCheckExeName} (a relative path would run whatever is in the current folder)");
         if (!File.Exists(exe))
             throw new FileNotFoundException($"{source} names {exe}, which does not exist");
-        if (Path.GetExtension(exe).Equals(".py", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException($"{source} names the Python script {exe}: BuildKit 0.5.0 runs {GapCheckExeName} instead; name its exe");
         return exe;
     }
 

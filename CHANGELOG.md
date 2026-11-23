@@ -10,7 +10,7 @@ Plugins with a Gameplay Options on/off option are 81 bytes larger when built aga
 
 ### Example
 
-This is the output of the README's builder, run with BuildKit 0.5.0 and sf-mod-check 0.15.0 (named by `BUILDKIT_SFMODCHECK`) against the Steam copy of Starfield.esm. It wrote an 883-byte `out\MyMod.esm`:
+This is the output of the README's builder, run with BuildKit 0.5.0 and sf-mod-check 0.15.0 installed as a .NET global tool (so it is on the PATH) against the Steam copy of Starfield.esm. It wrote an 883-byte `out\MyMod.esm`:
 
     > dotnet run
     ID lock: 4 records, 4 new, 0 moved back to their locked IDs (ids.lock.json)
@@ -18,7 +18,7 @@ This is the output of the README's builder, run with BuildKit 0.5.0 and sf-mod-c
       BuildKit: form version 582 set on 1 own records left at Mutagen's 576
       BuildKit: header interior cell count (INCC) set to 0 (was unset)
       BuildKit: own records written in Bethesda's FE FormID form (light plugin)
-      gap check: running C:\tools\sf-mod-check\sf-mod-check.exe gap
+      gap check: running C:\Users\Me\.dotnet\tools\sf-mod-check.exe gap
       gap check: MyMod.esm: 4 own records, 0 overrides, 0 compared with their master's copy
       gap check:   0 error(s), 0 warning(s)
       gap check: RESULT: OK (0 errors, 0 warnings)

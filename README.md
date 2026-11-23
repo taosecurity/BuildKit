@@ -44,7 +44,7 @@ Console.WriteLine(IdLock.Apply(mod, "ids.lock.json"));   // commit ids.lock.json
 PluginWriter.Write(mod, "out", game);                    // writes out\MyMod.esm
 ```
 
-`dotnet run` printed this with BuildKit 0.5.0 and sf-mod-check 0.15.0 on the PATH, and wrote an 883-byte `out\MyMod.esm`:
+`dotnet run` printed this with BuildKit 0.5.0 and sf-mod-check 0.15.0 installed as a .NET global tool (so it is on the PATH), and wrote an 883-byte `out\MyMod.esm`:
 
 ```
 > dotnet run
@@ -53,7 +53,7 @@ ID lock: 4 records, 4 new, 0 moved back to their locked IDs (ids.lock.json)
   BuildKit: form version 582 set on 1 own records left at Mutagen's 576
   BuildKit: header interior cell count (INCC) set to 0 (was unset)
   BuildKit: own records written in Bethesda's FE FormID form (light plugin)
-  gap check: running C:\tools\sf-mod-check\sf-mod-check.exe gap
+  gap check: running C:\Users\Me\.dotnet\tools\sf-mod-check.exe gap
   gap check: MyMod.esm: 4 own records, 0 overrides, 0 compared with their master's copy
   gap check:   0 error(s), 0 warning(s)
   gap check: RESULT: OK (0 errors, 0 warnings)
@@ -215,7 +215,7 @@ BuildKit looks for sf-mod-check in this order:
 - `WriteOptions.GapCheckExe`;
 - the path in the `BUILDKIT_SFMODCHECK` environment variable;
 - the first `sf-mod-check` found on PATH (by its full path, so an `sf-mod-check.exe` in the current folder is never
-  picked). On Windows only `sf-mod-check.exe` is found there; name a `.cmd` wrapper with the option or the variable.
+  picked). On Windows only `sf-mod-check.exe` is found there.
 
 A path named by the option or the variable must be a full path to an existing program, or the build throws.
 `PluginWriter.GapCheck`, called on its own, uses the variable and PATH the same way. Install it with
