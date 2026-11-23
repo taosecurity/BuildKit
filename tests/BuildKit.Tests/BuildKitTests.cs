@@ -703,16 +703,47 @@ public class GapCheckTests
             WriteWith(t, new WriteOptions());
             Assert.True(File.Exists(Path.Combine(t.Path, "stub", "args.txt")));
 
+            // GapCheck called directly (no exe) reads the variable too, as the not-found message says.
+            File.Delete(Path.Combine(t.Path, "stub", "args.txt"));
+            Assert.Equal(0, PluginWriter.GapCheck(Path.Combine(t.Path, "out", "Gap.esm"), t.Path));
+            Assert.True(File.Exists(Path.Combine(t.Path, "stub", "args.txt")));
+
             Environment.SetEnvironmentVariable(PluginWriter.GapCheckExeVariable, null);
             Environment.SetEnvironmentVariable("PATH", Path.Combine(t.Path, "stub"));
-            // The Windows stub is a .cmd, which FindSfModCheck (an .exe search) doesn't match; the Linux stub is found.
-            if (!OperatingSystem.IsWindows()) Assert.Equal(stub, PluginWriter.FindSfModCheck());
+            if (OperatingSystem.IsWindows())
+            {
+                // The PATH search on Windows looks for sf-mod-check.exe; any file of that name is enough for the search.
+                var exe = Path.Combine(t.Path, "stub", "sf-mod-check.exe");
+                File.WriteAllText(exe, "");
+                Environment.SetEnvironmentVariable("PATH", "\"" + Path.Combine(t.Path, "stub") + "\"");
+                Assert.Equal(exe, PluginWriter.FindSfModCheck());
+            }
+            else Assert.Equal(stub, PluginWriter.FindSfModCheck());
         }
         finally
         {
             Environment.SetEnvironmentVariable(PluginWriter.GapCheckExeVariable, oldVar);
             Environment.SetEnvironmentVariable("PATH", oldPath);
         }
+    }
+
+    [Fact]
+    public void ARelativeOrPythonPathIsRefused()
+    {
+        using var t = new TempDir();
+        var oldVar = Environment.GetEnvironmentVariable(PluginWriter.GapCheckExeVariable);
+        try
+        {
+            Environment.SetEnvironmentVariable(PluginWriter.GapCheckExeVariable, "sf-mod-check.exe");
+            var ex = Assert.Throws<ArgumentException>(() => WriteWith(t, new WriteOptions()));
+            Assert.Contains("full path", ex.Message);
+            Assert.Contains(PluginWriter.GapCheckExeVariable, ex.Message);
+        }
+        finally { Environment.SetEnvironmentVariable(PluginWriter.GapCheckExeVariable, oldVar); }
+        var py = Path.Combine(t.Sub("old"), "mutagen-gap-check.py");
+        File.WriteAllText(py, "");
+        var pyEx = Assert.Throws<ArgumentException>(() => WriteWith(t, new WriteOptions { GapCheckExe = py }));
+        Assert.Contains("Python script", pyEx.Message);
     }
 
     [Fact]

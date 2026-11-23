@@ -189,7 +189,7 @@ weapon.Name = Localized.For(mod, "Laser", text: s => s.ToUpperInvariant());   //
 | `GapCheck` | `true` | After writing, run `sf-mod-check gap` on the plugin if sf-mod-check is found (see below). |
 | `GapCheckExe` | none | Path to `sf-mod-check.exe` (or `sf-mod-check` on Linux). |
 | `GapCheckMastersDir` | none | Extra folder the gap check searches for masters. |
-| `FailOnGapErrors` | `true` | Throw when the gap check reports an error. |
+| `FailOnGapErrors` | `true` | Throw when the gap check exits nonzero (it found errors, or it could not check the plugin). |
 
 **`BethesdaFormIds` in detail.** Bethesda's own light plugins store their new records as `FE` plus the plugin's place
 among light masters (`FE000800` with no light masters), and medium plugins as `FD` plus their place among medium
@@ -215,9 +215,10 @@ BuildKit looks for sf-mod-check in this order:
 - `WriteOptions.GapCheckExe`;
 - the path in the `BUILDKIT_SFMODCHECK` environment variable;
 - the first `sf-mod-check` found on PATH (by its full path, so an `sf-mod-check.exe` in the current folder is never
-  picked).
+  picked). On Windows only `sf-mod-check.exe` is found there; name a `.cmd` wrapper with the option or the variable.
 
-A path named by the option or the variable must exist, or the build throws. Install it with
+A path named by the option or the variable must be a full path to an existing program, or the build throws.
+`PluginWriter.GapCheck`, called on its own, uses the variable and PATH the same way. Install it with
 `dotnet tool install -g sf-mod-check`, or unpack the release zip and put its folder on PATH.
 
 If it finds none, it prints one line on standard error naming the fix (`gap check: NOT RUN (sf-mod-check was not

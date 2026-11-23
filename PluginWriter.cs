@@ -198,12 +198,7 @@ public static class PluginWriter
         });
         if (options.GapCheck)
         {
-            if (options.GapCheckExe != null && !File.Exists(options.GapCheckExe))
-                throw new FileNotFoundException($"WriteOptions.GapCheckExe {options.GapCheckExe} does not exist");
-            var envExe = Environment.GetEnvironmentVariable(GapCheckExeVariable);
-            if (options.GapCheckExe == null && !string.IsNullOrEmpty(envExe) && !File.Exists(envExe))
-                throw new FileNotFoundException($"{GapCheckExeVariable} names {envExe}, which does not exist");
-            var exe = options.GapCheckExe ?? (string.IsNullOrEmpty(envExe) ? null : envExe) ?? FindSfModCheck();
+            var exe = ResolveSfModCheck(options.GapCheckExe, "WriteOptions.GapCheckExe");
             if (exe == null)
                 Console.Error.WriteLine($"  gap check: NOT RUN ({GapCheckExeName} was not found). Install it (dotnet tool install -g {GapCheckExeName}, or the release from github.com/taosecurity/sf-mod-check) so it is on PATH, or set {GapCheckExeVariable} or WriteOptions.GapCheckExe to its path.");
             else
@@ -211,7 +206,7 @@ public static class PluginWriter
                 var exit = GapCheck(outPath, game.DataDir, options.GapCheckMastersDir, exe);
                 if (exit != 0 && options.FailOnGapErrors)
                     throw new Exception(exit == 1
-                        ? $"{GapCheckExeName} gap found errors in {outPath} (see above); fix them before handing the plugin over"
+                        ? $"{GapCheckExeName} gap found errors in {outPath} (see above); fix them before handing the plugin over. If the output above doesn't list errors, {exe} may be older than 0.15.0 (no gap command): update it"
                         : $"{GapCheckExeName} gap could not check {outPath} (exit {exit}, see above): a missing master, or an {GapCheckExeName} older than 0.15.0 with no gap command?");
             }
         }
@@ -219,10 +214,12 @@ public static class PluginWriter
     }
 
     /// <summary>Runs `sf-mod-check gap` on a plugin; prints its report and returns its exit code (0 ok, 1 errors,
-    /// 2 could not check). exe = the sf-mod-check path (null = <see cref="FindSfModCheck"/>; throws when not found).</summary>
+    /// 2 could not check). exe = the full path of the sf-mod-check program (null = the BUILDKIT_SFMODCHECK variable, else
+    /// PATH, as <see cref="ResolveSfModCheck"/>; throws when none is found).</summary>
     public static int GapCheck(string pluginPath, string dataDir, string? mastersDir = null, string? exe = null)
     {
-        exe ??= FindSfModCheck() ?? throw new FileNotFoundException($"{GapCheckExeName} not found on PATH; set {GapCheckExeVariable}");
+        exe = ResolveSfModCheck(exe, "exe") ?? throw new FileNotFoundException(
+            $"{GapCheckExeName} was not found on PATH. Install it (dotnet tool install -g {GapCheckExeName}), or set {GapCheckExeVariable} to its full path");
         Console.WriteLine($"  gap check: running {exe} gap");
         var psi = new ProcessStartInfo(exe) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var a in new[] { "gap", Path.GetFullPath(pluginPath), "--data", dataDir }) psi.ArgumentList.Add(a);
@@ -234,6 +231,28 @@ public static class PluginWriter
         p.WaitForExit();
         foreach (var l in err.Result.Split('\n', StringSplitOptions.RemoveEmptyEntries)) Console.Error.WriteLine($"  gap check: {l.TrimEnd()}");
         return p.ExitCode;
+    }
+
+    /// <summary>The sf-mod-check program the gap check runs: exe if given, else the BUILDKIT_SFMODCHECK variable, else
+    /// <see cref="FindSfModCheck"/> (null when PATH has none). A named path must be a full path to an existing program
+    /// (not a Python script, which BuildKit no longer runs), or this throws naming the fix. optionName is what the
+    /// message calls exe.</summary>
+    public static string? ResolveSfModCheck(string? exe, string optionName = "exe")
+    {
+        var source = optionName;
+        if (exe == null)
+        {
+            var env = Environment.GetEnvironmentVariable(GapCheckExeVariable);
+            if (string.IsNullOrWhiteSpace(env)) return FindSfModCheck();
+            (exe, source) = (env.Trim().Trim('"'), GapCheckExeVariable);
+        }
+        if (!Path.IsPathFullyQualified(exe))
+            throw new ArgumentException($"{source} is {exe}: give the full path of {GapCheckExeName} (a relative path would run whatever is in the current folder)");
+        if (!File.Exists(exe))
+            throw new FileNotFoundException($"{source} names {exe}, which does not exist");
+        if (Path.GetExtension(exe).Equals(".py", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"{source} names the Python script {exe}: BuildKit 0.5.0 runs {GapCheckExeName} instead; name its exe");
+        return exe;
     }
 
     /// <summary>The full path of the first sf-mod-check (sf-mod-check.exe on Windows) on PATH, or null. Searching PATH
