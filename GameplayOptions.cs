@@ -1,6 +1,7 @@
 // Settings > Gameplay Options records: the mod's own group (GPOG) holding its options (GMOP), with the debug switch
 // "Show Debug Messages (PC only)", off by default. The record shape was checked in game (2026-11-02); no vanilla
 // record is edited. The console can't reach a light plugin's records by name, so this is the debug switch.
+// Since 0.5.0 an on/off option also carries the two value rows (VOVS, VORV, RESN, VORN) the Creation Kit writes.
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Strings;
@@ -30,9 +31,21 @@ public static class GameplayOptions
         o.Name = Localized.For(mod, name, text);
         o.Description = Localized.For(mod, description + DefaultNote(defaultOn), text);
         o.Data = new BoolGameplayOptionData { Value1 = defaultOn, Value2 = defaultOn };
+        o.Rewards.Clear();
+        o.Rewards.AddRange(BoolRows(mod, text));
         if (key != null) mod.GameplayOptions.Add(o);
         return o;
     }
+
+    /// <summary>The two value rows the Creation Kit writes on every on/off option (checked 2026-11-23 against the
+    /// CK-made on/off options in six other authors' plugins): VOVS empty, VORV 0 then 1, RESN "DISABLE" then
+    /// "ENABLE", VORN 0. No GPOD: the CK writes GPOD (min, max, step) only on slider options, and every official
+    /// GPOF is a slider.</summary>
+    public static GameplayOptionReward[] BoolRows(StarfieldMod mod, Func<string, TranslatedString>? text = null) =>
+    [
+        new() { Description = Localized.For(mod, "", text), SettingValue = 0f, Name = Localized.For(mod, "DISABLE", text), RewardValue = 0f },
+        new() { Description = Localized.For(mod, "", text), SettingValue = 1f, Name = Localized.For(mod, "ENABLE", text), RewardValue = 0f },
+    ];
 
     /// <summary>The debug switch, off by default. shows = what the player sees, e.g. "My Mod's log lines on screen:
     /// the scan count and each change it makes"; the standard sentences about reporting problems follow it.</summary>

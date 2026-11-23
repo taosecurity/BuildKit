@@ -35,11 +35,12 @@ public sealed class WriteOptions
     /// <summary>Fill a blank SubtypeName (SNAM) on every dialogue topic from its Subtype before writing
     /// (DialogTopics.FixSubtypeNames).</summary>
     public bool FixDialogSubtypes { get; init; } = true;
-    /// <summary>Run mutagen-gap-check.py on the written plugin when the script can be found (GapCheckScript, else
-    /// BUILDKIT_TOOLS, else a "tools" folder above the builder). If it can't be found, one line says it was skipped.</summary>
+    /// <summary>Run `sf-mod-check gap` on the written plugin (the exe named by GapCheckExe, else by the
+    /// BUILDKIT_SFMODCHECK variable, else the first sf-mod-check on PATH). If it can't be found, one line on stderr
+    /// says so and names the fix; the build still succeeds.</summary>
     public bool GapCheck { get; init; } = true;
-    /// <summary>Full path of mutagen-gap-check.py, if it isn't in BUILDKIT_TOOLS or a "tools" folder above.</summary>
-    public string? GapCheckScript { get; init; }
+    /// <summary>Full path of the sf-mod-check exe, if it isn't on PATH and BUILDKIT_SFMODCHECK isn't set.</summary>
+    public string? GapCheckExe { get; init; }
     /// <summary>Extra folder the gap check looks in for masters before the Data folder (for example the build output).</summary>
     public string? GapCheckMastersDir { get; init; }
     /// <summary>Throw when the gap check reports an ERROR (its exit code 1).</summary>
@@ -109,8 +110,10 @@ public static class BethesdaFormIds
 
 public static class PluginWriter
 {
-    /// <summary>The gap check's file name.</summary>
-    public const string GapCheckScriptName = "mutagen-gap-check.py";
+    /// <summary>The gap check's program name (sf-mod-check, its "gap" command).</summary>
+    public const string GapCheckExeName = "sf-mod-check";
+    /// <summary>Environment variable that names the sf-mod-check exe.</summary>
+    public const string GapCheckExeVariable = "BUILDKIT_SFMODCHECK";
 
     /// <summary>Writes mod to outDir\FileName and returns the path.</summary>
     public static string Write(StarfieldMod mod, string outDir, GameData game, WriteOptions? options = null)
@@ -194,32 +197,34 @@ public static class PluginWriter
         });
         if (options.GapCheck)
         {
-            if (options.GapCheckScript != null && !File.Exists(options.GapCheckScript))
-                throw new FileNotFoundException($"WriteOptions.GapCheckScript {options.GapCheckScript} does not exist");
-            var script = options.GapCheckScript ?? TryFindTool(GapCheckScriptName);
-            if (script == null)
-                Console.WriteLine($"  gap check: skipped ({GapCheckScriptName} not found; set BUILDKIT_TOOLS or WriteOptions.GapCheckScript)");
+            if (options.GapCheckExe != null && !File.Exists(options.GapCheckExe))
+                throw new FileNotFoundException($"WriteOptions.GapCheckExe {options.GapCheckExe} does not exist");
+            var envExe = Environment.GetEnvironmentVariable(GapCheckExeVariable);
+            if (options.GapCheckExe == null && !string.IsNullOrEmpty(envExe) && !File.Exists(envExe))
+                throw new FileNotFoundException($"{GapCheckExeVariable} names {envExe}, which does not exist");
+            var exe = options.GapCheckExe ?? (string.IsNullOrEmpty(envExe) ? null : envExe) ?? FindSfModCheck();
+            if (exe == null)
+                Console.Error.WriteLine($"  gap check: NOT RUN ({GapCheckExeName} was not found). Install it (dotnet tool install -g {GapCheckExeName}, or the release from github.com/taosecurity/sf-mod-check) so it is on PATH, or set {GapCheckExeVariable} or WriteOptions.GapCheckExe to its path.");
             else
             {
-                var exit = GapCheck(outPath, game.DataDir, options.GapCheckMastersDir, script);
+                var exit = GapCheck(outPath, game.DataDir, options.GapCheckMastersDir, exe);
                 if (exit != 0 && options.FailOnGapErrors)
-                    throw new Exception($"mutagen-gap-check found errors in {outPath} (see above); fix them before handing the plugin over");
+                    throw new Exception($"{GapCheckExeName} gap exited {exit} for {outPath} (see above); fix the errors before handing the plugin over");
             }
         }
         return outPath;
     }
 
-    /// <summary>Runs python -I mutagen-gap-check.py on a plugin; prints its report and returns its exit code.
-    /// script = the script's path (null = find it as <see cref="FindTool"/> does).</summary>
-    public static int GapCheck(string pluginPath, string dataDir, string? mastersDir = null, string? script = null)
+    /// <summary>Runs `sf-mod-check gap` on a plugin; prints its report and returns its exit code (0 ok, 1 errors,
+    /// 2 could not check). exe = the sf-mod-check path (null = <see cref="FindSfModCheck"/>; throws when not found).</summary>
+    public static int GapCheck(string pluginPath, string dataDir, string? mastersDir = null, string? exe = null)
     {
-        script ??= FindTool(GapCheckScriptName);
-        var python = FindPython();
-        Console.WriteLine($"  gap check: running {script} with {python}");
-        var psi = new ProcessStartInfo(python) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
-        foreach (var a in new[] { "-I", script, Path.GetFullPath(pluginPath), "--data", dataDir }) psi.ArgumentList.Add(a);
+        exe ??= FindSfModCheck() ?? throw new FileNotFoundException($"{GapCheckExeName} not found on PATH; set {GapCheckExeVariable}");
+        Console.WriteLine($"  gap check: running {exe} gap");
+        var psi = new ProcessStartInfo(exe) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var a in new[] { "gap", Path.GetFullPath(pluginPath), "--data", dataDir }) psi.ArgumentList.Add(a);
         if (mastersDir != null) { psi.ArgumentList.Add("--masters-dir"); psi.ArgumentList.Add(mastersDir); }
-        using var p = Process.Start(psi) ?? throw new Exception("could not start python");
+        using var p = Process.Start(psi) ?? throw new Exception($"could not start {exe}");
         var err = p.StandardError.ReadToEndAsync();
         string? line;
         while ((line = p.StandardOutput.ReadLine()) != null) Console.WriteLine($"  gap check: {line}");
@@ -228,22 +233,19 @@ public static class PluginWriter
         return p.ExitCode;
     }
 
-    /// <summary>The full path of the Python to run: the first python.exe (Windows) or python3/python (Linux) on PATH.
-    /// Searching PATH ourselves keeps a python.exe in the current folder or the builder's folder from being picked
-    /// first, as Windows would for a bare name. Falls back to the bare name when none is found.</summary>
-    public static string FindPython()
+    /// <summary>The full path of the first sf-mod-check (sf-mod-check.exe on Windows) on PATH, or null. Searching PATH
+    /// ourselves, and skipping relative entries, keeps an sf-mod-check in the current folder or the builder's folder
+    /// from being run, as Windows would for a bare name.</summary>
+    public static string? FindSfModCheck()
     {
-        var names = OperatingSystem.IsWindows() ? new[] { "python.exe" } : new[] { "python3", "python" };
+        var name = OperatingSystem.IsWindows() ? GapCheckExeName + ".exe" : GapCheckExeName;
         foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
-            if (!Path.IsPathFullyQualified(dir)) continue;   // a relative PATH entry would mean the current folder
-            foreach (var n in names)
-            {
-                var p = Path.Combine(dir, n);
-                if (File.Exists(p)) return p;
-            }
+            if (!Path.IsPathFullyQualified(dir)) continue;
+            var p = Path.Combine(dir, name);
+            if (File.Exists(p)) return p;
         }
-        return OperatingSystem.IsWindows() ? "python" : "python3";
+        return null;
     }
 
     /// <summary>Finds a helper file: in BUILDKIT_TOOLS if set, else in the first "tools" folder holding it above the

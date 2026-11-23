@@ -26,7 +26,7 @@ In a new or existing .NET 9 (or later) console project:
 ```
 dotnet new console -n MyBuilder
 cd MyBuilder
-dotnet add package Taosecurity.Starfield.BuildKit --version 0.4.2
+dotnet add package Taosecurity.Starfield.BuildKit --version 0.5.0
 ```
 
 ## 4. Prove the install works
@@ -43,9 +43,11 @@ PluginWriter.Write(mod, "out", game);
 Console.WriteLine(File.Exists(Path.Combine("out", "MyMod.esm")) ? "OK" : "FAILED");
 ```
 
-Then run `dotnet run`. It prints a "gap check: skipped" line (plus any `BuildKit:` lines) and `OK`; `out\MyMod.esm`
-exists. The "gap check: skipped" line is expected and harmless: the optional gap check needs a Python script that
-isn't part of the package, and the plugin is written either way. No game files are needed for this; a real builder points `GameData` at the game's Data folder.
+Then run `dotnet run`. It prints any `BuildKit:` lines, a "gap check: NOT RUN" line and `OK`; `out\MyMod.esm`
+exists. The "gap check: NOT RUN" line (on standard error) is expected when `sf-mod-check` isn't installed: the gap
+check runs the separate tool `sf-mod-check gap` (found by `WriteOptions.GapCheckExe`, the `BUILDKIT_SFMODCHECK`
+variable, or PATH; install with `dotnet tool install -g sf-mod-check`), and the plugin is written either way. With it
+installed, the line is replaced by the check's own `gap check:` output ending in `RESULT: OK`. No game files are needed for this; a real builder points `GameData` at the game's Data folder.
 
 ## 5. Common tasks
 

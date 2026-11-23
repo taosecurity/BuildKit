@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.5.0 (2026-11-23)
+
+### What's new
+
+The gap check now runs `sf-mod-check gap`, from the public sf-mod-check tool (0.15.0 or later), instead of the private `mutagen-gap-check.py` script. It is never skipped silently: when sf-mod-check can't be found, BuildKit prints one line that names the fix. The "Show Debug Messages (PC only)" option and every other on/off option now carry the two value rows the Creation Kit writes.
+
+Plugins with a Gameplay Options on/off option are 81 bytes larger when built again with 0.5.0 (the eight added fields). A localized plugin's string IDs after the option's text shift too.
+
+### Example
+
+This is the output of the README's builder, run with BuildKit 0.5.0 and sf-mod-check 0.15.0 (named by `BUILDKIT_SFMODCHECK`) against the Steam copy of Starfield.esm. It wrote an 883-byte `out\MyMod.esm`:
+
+    > dotnet run
+    ID lock: 4 records, 4 new, 0 moved back to their locked IDs (ids.lock.json)
+      BuildKit: Bethesda fields filled: 0 message back-out index, 0 form list add-to-list, 0 model light layer, 1 keyword, 0 story-manager quest node
+      BuildKit: form version 582 set on 1 own records left at Mutagen's 576
+      BuildKit: header interior cell count (INCC) set to 0 (was unset)
+      BuildKit: own records written in Bethesda's FE FormID form (light plugin)
+      gap check: running C:\tools\sf-mod-check\sf-mod-check.exe gap
+      gap check: MyMod.esm: 4 own records, 0 overrides, 0 compared with their master's copy
+      gap check:   0 error(s), 0 warning(s)
+      gap check: RESULT: OK (0 errors, 0 warnings)
+      gap check: sf-mod-check 0.15.0 by Richard Bejtlich - GPL-3.0 - https://github.com/taosecurity/sf-mod-check
+
+Without sf-mod-check, the same build prints this instead of the five `gap check:` lines, and still writes the plugin:
+
+      gap check: NOT RUN (sf-mod-check was not found). Install it (dotnet tool install -g sf-mod-check, or the release from github.com/taosecurity/sf-mod-check) so it is on PATH, or set BUILDKIT_SFMODCHECK or WriteOptions.GapCheckExe to its path.
+
+### Changes
+
+- The gap check looks for sf-mod-check in `WriteOptions.GapCheckExe`, then the `BUILDKIT_SFMODCHECK` environment variable, then PATH. A path named by the option or the variable that doesn't exist throws. It passes the Data folder as `--data` and `GapCheckMastersDir` as `--masters-dir`, and any nonzero exit throws when `FailOnGapErrors` is on. Six new tests use a stub exe.
+- `WriteOptions.GapCheckScript` is gone (use `GapCheckExe`), and so is the `BUILDKIT_TOOLS` search for a Python script and for Python itself. BuildKit no longer runs Python.
+- `GameplayOptions.Bool` and `GameplayOptions.Debug` write the two value rows (`VOVS`, `VORV`, `RESN`, `VORN`: DISABLE at 0, ENABLE at 1) that the Creation Kit writes on every on/off option, and no `GPOD` (the Creation Kit writes that only on sliders; all of Bethesda's own options are sliders). A byte compare against a Creation Kit-made option from another author shows the same eight fields. Two new tests check the written fields.
+
+### Not yet
+
+- The new rows haven't been looked at in game on a rebuilt mod; the menu should still show the switch and its text.
+
+### Download
+
+`dotnet add package Taosecurity.Starfield.BuildKit --version 0.5.0`
+
 ## 0.4.2 (2026-11-20)
 
 ### What's new
@@ -10,7 +52,7 @@ Plugins built with 0.4.1 are unchanged when they're built again with 0.4.2.
 
 ### Example
 
-The README's `Localized.For` lines, run once on a plain plugin and once on a localized one, with each name's language count:
+This is the output of the README's `Localized.For` lines, run once on a plain plugin and once on a localized one, with each name's language count:
 
     > dotnet run
     localized=False: 1 Shiny, 1 LASER
@@ -40,7 +82,7 @@ Windows behaves exactly as before, and plugins built with 0.4.0 are unchanged.
 
 ### Example
 
-A light plugin built with 0.4.1 against the Steam copy of Starfield.esm (the builder is in the README's Example):
+This is a light plugin built with 0.4.1 against the Steam copy of Starfield.esm (the builder is in the README's Example):
 
     > dotnet run
     ID lock: 4 records, 4 new, 0 moved back to their locked IDs (ids.lock.json)
@@ -56,7 +98,7 @@ A light plugin built with 0.4.1 against the Steam copy of Starfield.esm (the bui
 - Each folder is listed once, sorted, and listed again when its modification time changes. A plugin written a moment ago is still found, and a long-unchanged Data folder isn't listed again for every missing optional plugin.
 - A plugin found under another spelling keeps the requested name as its ModKey, so master lists in built plugins don't depend on how the disk spells the file.
 - Its loose string tables (in a `Strings` folder of any spelling) are copied under the requested name into a temporary folder, deleted on `Dispose`, so a localized plugin keeps its text. The same happens for an exactly spelled plugin whose `Strings` folder is spelled differently.
-- New `GameData.Warnings` (read-only): when the file used differs only in case from other files in its folder and none is spelled exactly as requested, the first in sorted order is used and a warning is added there (and written once to standard error).
+- A new read-only `GameData.Warnings` list collects warnings: when the file used differs only in case from other files in its folder and none is spelled exactly as requested, the first in sorted order is used and a warning is added there (and written once to standard error).
 - A damaged plugin that makes `TryOpen` throw gives the same error on a second try, not "is its own master".
 
 ### Not yet
@@ -70,7 +112,7 @@ A light plugin built with 0.4.1 against the Steam copy of Starfield.esm (the bui
 
 ## 0.4.0 (2026-11-18)
 
-Built on Mutagen.Bethesda.Starfield 0.54.4.
+This version is built on Mutagen.Bethesda.Starfield 0.54.4.
 
 - New `Messages.Hud` and `Messages.Box` make Message records for on-screen text that also shows on Xbox and
   PlayStation, where the Debug script does nothing. The field shapes and their order copy vanilla HUD and box messages.
@@ -87,12 +129,12 @@ Built on Mutagen.Bethesda.Starfield 0.54.4.
 
 ## 0.3.1 (2026-11-16)
 
-Security fixes. Plugins built with 0.3.0 are unchanged.
+This release has security fixes. Plugins built with 0.3.0 are unchanged.
 
 - `GameData` refuses master names that aren't plain plugin file names. `HeaderMasters` (and so `Open`/`TryOpen`)
   throws `InvalidDataException` when a plugin lists a master such as `\\server\share\x.esm`, `..\x.esm` or
   `C:\x.esm`; `Locate` throws `ArgumentException` for such a name. Before this, opening a crafted plugin could make
-  Windows contact another computer and send the user's login hash. New `GameData.IsPlainPluginName` and
+  Windows contact another computer and send the user's login hash. The new helpers are `GameData.IsPlainPluginName` and
   `GameData.Printable`.
 - The gap check's script search stops below the drive root, so a `C:\tools` or `D:\tools` folder another account
   created is never run. Python is started by its full path from PATH (`PluginWriter.FindPython`), and the script and
@@ -100,12 +142,12 @@ Security fixes. Plugins built with 0.3.0 are unchanged.
 
 ## 0.3.0 (2026-11-16)
 
-Built on Mutagen.Bethesda.Starfield 0.54.4. Tested in game with a light plugin built on it (FE FormIDs and the
+This version is built on Mutagen.Bethesda.Starfield 0.54.4. It was tested in game with a light plugin built on it (FE FormIDs and the
 Bethesda fields below).
 
-- AGENTS.md: step-by-step instructions for AI assistants, also in the package. README: "What BuildKit prints".
+- AGENTS.md gives step-by-step instructions for AI assistants, and it is also in the package. The README has a "What BuildKit prints" section.
 
-- New write option `BethesdaFormIds`, on by default: a light or medium plugin's own new records, and references to
+- A new write option, `BethesdaFormIds`, is on by default: a light or medium plugin's own new records, and references to
   them, are stored in the form Bethesda's own Starfield plugins use (`FE...` for light, `FD...` for medium), instead
   of Mutagen's full-master form (`01...`). xEdit 4.1.5r no longer reports HITME warnings on them. Full plugins are
   unchanged. This option on its own changes only those FormID bytes. Plugins written with this form read back
@@ -113,34 +155,34 @@ Bethesda fields below).
 - A plugin rebuilt on 0.3.0 with the default options also differs from a 0.2.0 build in the fields the options below
   fill, the form version, NPC compression, INCC and group-header stamps. Each option prints a `BuildKit:` line when it
   changes something.
-- `BethesdaFormIds.Enable` / `Disable` / `IsEnabled` for builders that write without `PluginWriter.Write`.
-- Four more write options, all on by default, so the output matches Bethesda's own plugins more closely:
+- `BethesdaFormIds.Enable` / `Disable` / `IsEnabled` are there for builders that write without `PluginWriter.Write`.
+- Four more write options, all on by default, make the output match Bethesda's own plugins more closely:
   `InteriorCellCount` (header INCC), `FillBethesdaFields` (fields Bethesda always writes, filled on own records
   only: MESG BNAM, FLST ANAM, model FLLD on ALCH/ACTI, KYWD CNAM/TNAM/FNAM, SMQN XNAM), `CkFormVersion` (582 for own
   records left at Mutagen's 576) and `CompressNpcs`. The helpers are public in `BethesdaFields`.
-- New write option `ZeroGroupStamps`, on by default: group headers are written with zero version-control words, as
+- A new write option, `ZeroGroupStamps`, is on by default: group headers are written with zero version-control words, as
   in Bethesda's own plugins, instead of the stamps a Creation Kit save leaves (which Mutagen keeps when a builder
   copies from such a plugin). Only group headers change; records are untouched.
 - Tests now run one at a time (Mutagen keeps the list this option uses in one shared set).
 
 ## 0.2.0 (2026-11-09)
 
-Built on Mutagen.Bethesda.Starfield 0.54.4.
+This version is built on Mutagen.Bethesda.Starfield 0.54.4.
 
-- `Quests.New`: a quest written with NEXT and ANAM, as the Creation Kit writes every quest.
-- `DialogTopics.FixSubtypeNames`: fills a blank SNAM on dialogue topics from their Subtype. `PluginWriter.Write`
+- `Quests.New` writes a quest with NEXT and ANAM, as the Creation Kit writes every quest.
+- `DialogTopics.FixSubtypeNames` fills a blank SNAM on dialogue topics from their Subtype. `PluginWriter.Write`
   runs it by default (new write option `FixDialogSubtypes`); topics that already have an SNAM are left alone.
 
 ## 0.1.0 (2026-11-09)
 
-First public release. Built on Mutagen.Bethesda.Starfield 0.54.4.
+This is the first public release. It is built on Mutagen.Bethesda.Starfield 0.54.4.
 
-- `GameData`: opens masters with their light, medium or full flags, master-of-master first; extra folders searched
-  before the Data folder; EditorID lookups (later master wins); link cache; `OpenPlugin` to read back a written plugin.
-- `Plugin.New` with the Creation Kit header (form version 582) and the FormID range for each plugin style.
-- `PluginWriter.Write`: EFIF/MUID filled on effects, ONAM written like the Creation Kit, masters in load order,
-  one-thread writing for the same bytes on every run, optional gap check.
-- New write options: `Masters` (explicit master list), `NextFormId` (keep the header's Next Object ID) and
+- `GameData` opens masters with their light, medium or full flags, master-of-master first. It searches extra folders
+  before the Data folder, and it has EditorID lookups (later master wins), a link cache and `OpenPlugin` to read back a written plugin.
+- `Plugin.New` makes a plugin with the Creation Kit header (form version 582) and the FormID range for each plugin style.
+- `PluginWriter.Write` fills EFIF/MUID on effects, writes ONAM like the Creation Kit and masters in load order,
+  writes on one thread for the same bytes on every run, and runs an optional gap check.
+- The new write options are `Masters` (explicit master list), `NextFormId` (keep the header's Next Object ID) and
   `GapCheckScript`. The gap check is now skipped, with one line, when its script isn't found.
-- `Effects`, `IdLock`, `GameplayOptions` (with the "Show Debug Messages" option) and `Localized`.
-- Tests on plugins made by the test suite itself; no game files.
+- The package also has `Effects`, `IdLock`, `GameplayOptions` (with the "Show Debug Messages" option) and `Localized`.
+- The tests run on plugins made by the test suite itself, and they use no game files.

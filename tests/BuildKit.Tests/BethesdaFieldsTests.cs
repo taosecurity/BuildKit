@@ -11,7 +11,7 @@ namespace BuildKit.Tests;
 public class BethesdaFieldsTests
 {
     /// <summary>Records of the file: (sig, flags, form version, subrecords as (type, data)), decompressed.</summary>
-    static List<(string Sig, uint Flags, ushort FormVersion, List<(string, byte[])> Subs)> Records(string path, bool header = false)
+    internal static List<(string Sig, uint Flags, ushort FormVersion, List<(string, byte[])> Subs)> Records(string path, bool header = false)
     {
         var b = File.ReadAllBytes(path);
         var list = new List<(string, uint, ushort, List<(string, byte[])>)>();

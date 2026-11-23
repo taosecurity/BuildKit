@@ -60,6 +60,34 @@ public class GameplayOptionsTests
         Assert.Same(o, mod.GameplayOptions.Single());
         Assert.True(o.Data is BoolGameplayOptionData { Value1: true });
     }
+
+    [Fact]
+    public void OnOffOptionHasTheCreationKitValueRows()
+    {
+        // The field order and values the Creation Kit writes on an on/off option (no GPOD: that is for sliders).
+        using var t = new TempDir();
+        using var game = new GameData(t.Path);
+        var mod = Plugin.New("Rows.esm", PluginStyle.Light, "test", "test");
+        GameplayOptions.Debug(mod, "OPT_Option_Debug", "lines");
+        var path = PluginWriter.Write(mod, t.Path, game, Fixtures.NoGapCheck);
+        var subs = BethesdaFieldsTests.Records(path).Single(r => r.Sig == "GPOF").Subs;
+        Assert.Equal("EDID NNAM DNAM TNAM VNAM WNAM VOVS VORV RESN VORN VOVS VORV RESN VORN",
+            string.Join(" ", subs.Select(s => s.Item1)));
+        string Str(int i) => System.Text.Encoding.ASCII.GetString(subs[i].Item2).TrimEnd('\0');
+        float F(int i) => BitConverter.ToSingle(subs[i].Item2);
+        Assert.Equal(new byte[] { 0 }, subs[3].Item2);                      // TNAM: on/off
+        Assert.Equal(("", 0f, "DISABLE", 0f), (Str(6), F(7), Str(8), F(9)));
+        Assert.Equal(("", 1f, "ENABLE", 0f), (Str(10), F(11), Str(12), F(13)));
+    }
+
+    [Fact]
+    public void BoolOptionHasOffThenOnRows()
+    {
+        var mod = Plugin.New("Options.esm", PluginStyle.Light, "test", "test");
+        var o = GameplayOptions.Bool(mod, "OPT_Option_X", "X", "Does X.", false);
+        Assert.Equal(2, o.Rewards.Count);
+        Assert.Equal([0f, 1f], o.Rewards.Select(r => r.SettingValue));
+    }
 }
 
 public class PluginTests
@@ -568,24 +596,126 @@ public class PluginWriterTests
     }
 
     [Fact]
-    public void MissingExplicitGapCheckScriptFailsClearly()
+    public void TryFindToolGivesNullForAMissingFile() =>
+        Assert.Null(PluginWriter.TryFindTool("no-such-buildkit-helper-7f3a.py"));
+}
+
+/// The gap check runs `sf-mod-check gap`. A stub script stands in for the exe. These tests change the process's
+/// PATH and BUILDKIT_SFMODCHECK, so they share one collection and run one at a time.
+[Collection("GapCheckEnv")]
+public class GapCheckTests
+{
+    /// A stub "sf-mod-check" that records its arguments next to itself, prints one line and exits with exitCode.
+    static string Stub(string dir, int exitCode)
     {
-        using var t = new TempDir();
+        Directory.CreateDirectory(dir);
+        if (OperatingSystem.IsWindows())
+        {
+            var cmd = Path.Combine(dir, "sf-mod-check.cmd");
+            File.WriteAllText(cmd, $"@echo off\r\necho %* > \"%~dp0args.txt\"\r\necho stub report\r\nexit /b {exitCode}\r\n");
+            return cmd;
+        }
+        var sh = Path.Combine(dir, "sf-mod-check");
+        File.WriteAllText(sh, $"#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/args.txt\"\necho stub report\nexit {exitCode}\n");
+        File.SetUnixFileMode(sh, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        return sh;
+    }
+
+    static string WriteWith(TempDir t, WriteOptions opts)
+    {
         using var game = new GameData(t.Path);
         var mod = Plugin.New("Gap.esm", PluginStyle.Light, "test", "gap");
-        var opts = new WriteOptions { GapCheckScript = Path.Combine(t.Path, "nope.py") };
-        Assert.Throws<FileNotFoundException>(() => PluginWriter.Write(mod, t.Sub("out"), game, opts));
+        return PluginWriter.Write(mod, t.Sub("out"), game, opts);
     }
 
     [Fact]
-    public void TryFindToolGivesNullForAMissingFile() =>
-        Assert.Null(PluginWriter.TryFindTool("no-such-buildkit-helper-7f3a.py"));
+    public void RunsSfModCheckGapAndPassesThePluginAndDataFolder()
+    {
+        using var t = new TempDir();
+        var stub = Stub(t.Sub("stub"), 0);
+        var path = WriteWith(t, new WriteOptions { GapCheckExe = stub });
+        var args = File.ReadAllText(Path.Combine(t.Path, "stub", "args.txt"));
+        Assert.StartsWith("gap ", args);
+        Assert.Contains("Gap.esm", args);
+        Assert.Contains("--data", args);
+        Assert.True(File.Exists(path));
+    }
 
     [Fact]
-    public void FindPythonGivesAFullPathOrTheBareName()
+    public void AFailingGapCheckThrowsAndNamesTheExitCode()
     {
-        var p = PluginWriter.FindPython();
-        Assert.True(Path.IsPathFullyQualified(p) || p is "python" or "python3");
+        using var t = new TempDir();
+        var stub = Stub(t.Sub("stub"), 1);
+        var ex = Assert.Throws<Exception>(() => WriteWith(t, new WriteOptions { GapCheckExe = stub }));
+        Assert.Contains("exited 1", ex.Message);
+    }
+
+    [Fact]
+    public void AFailingGapCheckIsOnlyReportedWhenFailOnGapErrorsIsOff()
+    {
+        using var t = new TempDir();
+        var stub = Stub(t.Sub("stub"), 1);
+        Assert.True(File.Exists(WriteWith(t, new WriteOptions { GapCheckExe = stub, FailOnGapErrors = false })));
+    }
+
+    [Fact]
+    public void AMissingExplicitExeFailsClearly()
+    {
+        using var t = new TempDir();
+        var opts = new WriteOptions { GapCheckExe = Path.Combine(t.Path, "nope.exe") };
+        Assert.Throws<FileNotFoundException>(() => WriteWith(t, opts));
+    }
+
+    [Fact]
+    public void TheVariableAndPathFindTheExe()
+    {
+        using var t = new TempDir();
+        var stub = Stub(t.Sub("stub"), 0);
+        var oldVar = Environment.GetEnvironmentVariable(PluginWriter.GapCheckExeVariable);
+        var oldPath = Environment.GetEnvironmentVariable("PATH");
+        try
+        {
+            Environment.SetEnvironmentVariable(PluginWriter.GapCheckExeVariable, stub);
+            WriteWith(t, new WriteOptions());
+            Assert.True(File.Exists(Path.Combine(t.Path, "stub", "args.txt")));
+
+            Environment.SetEnvironmentVariable(PluginWriter.GapCheckExeVariable, null);
+            Environment.SetEnvironmentVariable("PATH", Path.Combine(t.Path, "stub"));
+            // The Windows stub is a .cmd, which FindSfModCheck (an .exe search) doesn't match; the Linux stub is found.
+            if (!OperatingSystem.IsWindows()) Assert.Equal(stub, PluginWriter.FindSfModCheck());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(PluginWriter.GapCheckExeVariable, oldVar);
+            Environment.SetEnvironmentVariable("PATH", oldPath);
+        }
+    }
+
+    [Fact]
+    public void NotFoundSaysSoOnStderrAndTheBuildStillSucceeds()
+    {
+        using var t = new TempDir();
+        var oldVar = Environment.GetEnvironmentVariable(PluginWriter.GapCheckExeVariable);
+        var oldPath = Environment.GetEnvironmentVariable("PATH");
+        var oldErr = Console.Error;
+        var err = new StringWriter();
+        try
+        {
+            Environment.SetEnvironmentVariable(PluginWriter.GapCheckExeVariable, null);
+            Environment.SetEnvironmentVariable("PATH", t.Sub("empty"));
+            Console.SetError(err);
+            Assert.True(File.Exists(WriteWith(t, new WriteOptions())));
+        }
+        finally
+        {
+            Console.SetError(oldErr);
+            Environment.SetEnvironmentVariable(PluginWriter.GapCheckExeVariable, oldVar);
+            Environment.SetEnvironmentVariable("PATH", oldPath);
+        }
+        var text = err.ToString();
+        Assert.Contains("NOT RUN", text);
+        Assert.Contains(PluginWriter.GapCheckExeVariable, text);
+        Assert.Contains("dotnet tool install", text);
     }
 }
 

@@ -44,7 +44,7 @@ Console.WriteLine(IdLock.Apply(mod, "ids.lock.json"));   // commit ids.lock.json
 PluginWriter.Write(mod, "out", game);                    // writes out\MyMod.esm
 ```
 
-`dotnet run` printed this with BuildKit 0.4.2, and wrote an 802-byte `out\MyMod.esm`:
+`dotnet run` printed this with BuildKit 0.5.0 and sf-mod-check 0.15.0 on the PATH, and wrote an 883-byte `out\MyMod.esm`:
 
 ```
 > dotnet run
@@ -53,12 +53,17 @@ ID lock: 4 records, 4 new, 0 moved back to their locked IDs (ids.lock.json)
   BuildKit: form version 582 set on 1 own records left at Mutagen's 576
   BuildKit: header interior cell count (INCC) set to 0 (was unset)
   BuildKit: own records written in Bethesda's FE FormID form (light plugin)
-  gap check: skipped (mutagen-gap-check.py not found; set BUILDKIT_TOOLS or WriteOptions.GapCheckScript)
+  gap check: running C:\tools\sf-mod-check\sf-mod-check.exe gap
+  gap check: MyMod.esm: 4 own records, 0 overrides, 0 compared with their master's copy
+  gap check:   0 error(s), 0 warning(s)
+  gap check: RESULT: OK (0 errors, 0 warnings)
+  gap check: sf-mod-check 0.15.0 by Richard Bejtlich - GPL-3.0 - https://github.com/taosecurity/sf-mod-check
 ```
 
 Each `BuildKit:` line is one thing it changed to match Bethesda's own plugins. The first line is the ID lock's
-summary, which your builder prints. The "gap check: skipped" line is normal: the gap check is an optional script
-that isn't part of the package (see "The gap check" below). Use `game.Get<IKeywordGetter>("SomeEditorID")` to look
+summary, which your builder prints. The `gap check:` lines are the output of `sf-mod-check gap` (see "The gap
+check" below). Without sf-mod-check, the build still succeeds and prints one line instead:
+`gap check: NOT RUN (sf-mod-check was not found). Install it ...`. Use `game.Get<IKeywordGetter>("SomeEditorID")` to look
 up a record in the open masters by its EditorID.
 
 ## What it does for you
@@ -116,7 +121,7 @@ Mutagen version to the same project.
 | `Quests` | `New(mod, editorId)` makes a quest with empty (not missing) condition and alias lists, so it's written with NEXT and ANAM like a Creation Kit quest. A quest made with plain `AddNew` has neither. |
 | `DialogTopics` | `FixSubtypeNames(mod)` fills a blank SubtypeName (SNAM) on every dialogue topic with the code that matches its Subtype, as vanilla topics have. `PluginWriter.Write` calls it for you. |
 | `IdLock` | `Apply(mod, lockPath)` keeps every own record's FormID the same from build to build, using a JSON file of EditorID to FormID. New records get the next free ID. The build stops if a locked record disappears, if two records share an EditorID, or if a record has no EditorID. `update: false` only checks. |
-| `GameplayOptions` | `Debug(...)` makes a "Show Debug Messages (PC only)" option, off by default, for Settings > Gameplay Options. `Bool(...)` makes other on/off options, and `Group(...)` makes the mod's own options group. Create the options first and the group last. |
+| `GameplayOptions` | `Debug(...)` makes a "Show Debug Messages (PC only)" option, off by default, for Settings > Gameplay Options. `Bool(...)` makes other on/off options (both carry the two value rows the Creation Kit writes for an on/off option), and `Group(...)` makes the mod's own options group. Create the options first and the group last. |
 | `Localized` | `Text(s)` gives the same text in all nine languages the game ships, for localized plugins. `For(mod, s, text:)` picks the right kind of text for your own records: your `text:` function if you pass one, otherwise all nine languages on a localized plugin and plain text on any other. `GameplayOptions` and `Messages` use `For`, so pass your own `text:` function to change what they write. |
 | `Messages` | `Hud(mod, editorId, text, seconds)` makes a top-left HUD line, and `Box(mod, editorId, text, title, buttons, ownerQuest)` makes a message box. Both copy the shape of vanilla messages. Show them in Papyrus with `Message.Show()`, which works on Xbox and PlayStation. `Debug.Notification` and `Debug.MessageBox` do nothing on consoles (see below). |
 
@@ -181,8 +186,8 @@ weapon.Name = Localized.For(mod, "Laser", text: s => s.ToUpperInvariant());   //
 | `Masters` | none | An explicit master list, written exactly as given, even masters no record points into (for patches that list a master only to load after it). |
 | `MastersListContent` | Mutagen's | Lower-level form of `Masters`: `NoCheck` writes the header's `MasterReferences` as you filled them. |
 | `NextFormId` | Mutagen's | `NoCheck` keeps the Next Object ID you set in the header instead of recomputing it. |
-| `GapCheck` | `true` | After writing, run `mutagen-gap-check.py` on the plugin if the script is found (see below). |
-| `GapCheckScript` | none | Path to that script. |
+| `GapCheck` | `true` | After writing, run `sf-mod-check gap` on the plugin if sf-mod-check is found (see below). |
+| `GapCheckExe` | none | Path to `sf-mod-check.exe` (or `sf-mod-check` on Linux). |
 | `GapCheckMastersDir` | none | Extra folder the gap check searches for masters. |
 | `FailOnGapErrors` | `true` | Throw when the gap check reports an error. |
 
@@ -201,18 +206,25 @@ fields the builder set itself, are left alone.
 
 ### The gap check
 
-The gap check is an optional Python script that compares a written plugin with its masters. It reports data Mutagen
-0.54.4 is known to lose on write, plus missing ONAM entries. It isn't part of this package.
+The gap check compares a written plugin with its masters. It reports data Mutagen 0.54.4 is known to lose on write,
+plus missing ONAM entries. BuildKit doesn't contain it: it runs `sf-mod-check gap`, the gap command of the separate
+tool [sf-mod-check](https://github.com/taosecurity/sf-mod-check) (version 0.15.0 or later).
 
-BuildKit runs it when it finds `mutagen-gap-check.py` in one of these places, in this order:
+BuildKit looks for sf-mod-check in this order:
 
-- `WriteOptions.GapCheckScript`;
-- the folder named by the `BUILDKIT_TOOLS` environment variable;
-- a `tools` folder above the builder or the current folder (never a drive-root folder such as `C:\tools`).
+- `WriteOptions.GapCheckExe`;
+- the path in the `BUILDKIT_SFMODCHECK` environment variable;
+- the first `sf-mod-check` found on PATH (by its full path, so an `sf-mod-check.exe` in the current folder is never
+  picked).
 
-If it finds none, it prints one "skipped" line and carries on, as in the Example. Before it runs, it prints the
-script and the Python it uses. Python is found on PATH by its full path, so a `python.exe` in the current folder is
-never picked.
+A path named by the option or the variable must exist, or the build throws. Install it with
+`dotnet tool install -g sf-mod-check`, or unpack the release zip and put its folder on PATH.
+
+If it finds none, it prints one line on standard error naming the fix (`gap check: NOT RUN (sf-mod-check was not
+found). Install it ...`) and the build still succeeds, so a missing check is never silent. When it runs, BuildKit
+prints the exe it uses and relays the output, and any nonzero exit (errors found, or the plugin couldn't be checked)
+throws unless `FailOnGapErrors` is off. The Data folder you gave `GameData` is passed as `--data`, and
+`GapCheckMastersDir` as `--masters-dir`.
 
 ### Master names
 
