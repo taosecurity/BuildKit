@@ -30,9 +30,10 @@ Without sf-mod-check, the same build prints this instead of the five `gap check:
 
 ### Changes
 
-- The gap check looks for sf-mod-check in `WriteOptions.GapCheckExe`, then the `BUILDKIT_SFMODCHECK` environment variable, then PATH. A path named by the option or the variable that doesn't exist throws. It passes the Data folder as `--data` and `GapCheckMastersDir` as `--masters-dir`, and any nonzero exit throws when `FailOnGapErrors` is on. Six new tests use a stub exe.
-- `WriteOptions.GapCheckScript` is gone (use `GapCheckExe`), and so is the `BUILDKIT_TOOLS` search for a Python script and for Python itself. BuildKit no longer runs Python.
-- `GameplayOptions.Bool` and `GameplayOptions.Debug` write the two value rows (`VOVS`, `VORV`, `RESN`, `VORN`: DISABLE at 0, ENABLE at 1) that the Creation Kit writes on every on/off option, and no `GPOD` (the Creation Kit writes that only on sliders; all of Bethesda's own options are sliders). A byte compare against a Creation Kit-made option from another author shows the same eight fields. Two new tests check the written fields.
+- The gap check looks for sf-mod-check in `WriteOptions.GapCheckExe`, then the `BUILDKIT_SFMODCHECK` environment variable, then PATH. A path named by the option or the variable that doesn't exist throws. It passes the Data folder as `--data` and `GapCheckMastersDir` as `--masters-dir`, and any nonzero exit throws when `FailOnGapErrors` is on. Seven new tests use a stub exe.
+- `WriteOptions.GapCheckScript` is gone (use `GapCheckExe`). The gap check no longer looks in `BUILDKIT_TOOLS` for a Python script or for Python itself, and BuildKit no longer runs Python. `PluginWriter.TryFindTool` and `FindTool` still use `BUILDKIT_TOOLS` for a builder's own helper files.
+- When the gap check exits 1 the error says it found errors; any other nonzero exit says it could not check (a missing master, or an sf-mod-check older than 0.15.0).
+- `GameplayOptions.Bool` and `GameplayOptions.Debug` write the two value rows (`VOVS`, `VORV`, `RESN`, `VORN`: DISABLE at 0, ENABLE at 1) that the Creation Kit writes on every on/off option, and no `GPOD` (the Creation Kit writes that only on sliders; all of Bethesda's own options are sliders). A byte compare against a Creation Kit-made option from another author shows the same eight fields. These fixed values never go through a builder's `text:` function. Three new tests check the written fields.
 
 ### Not yet
 

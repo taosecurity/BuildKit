@@ -88,6 +88,20 @@ public class GameplayOptionsTests
         Assert.Equal(2, o.Rewards.Count);
         Assert.Equal([0f, 1f], o.Rewards.Select(r => r.SettingValue));
     }
+
+    [Fact]
+    public void TheValueRowsNeverGoThroughTheBuildersTextFunction()
+    {
+        // A translator that knows only the mod's own strings must not be asked for DISABLE, ENABLE or "".
+        var known = new Dictionary<string, string> { ["  Show Debug Messages (PC only)"] = "Debug" };
+        TranslatedString Translate(string s) =>
+            known.TryGetValue(s, out var v) ? Localized.Text(v) : s.StartsWith("Shows ") ? Localized.Text(s) : throw new KeyNotFoundException(s);
+        var mod = Plugin.New("LocRows.esm", PluginStyle.Light, "test", "test", localized: true);
+        var o = GameplayOptions.Debug(mod, "OPT_Option_Debug", "lines", text: Translate);
+        Assert.Equal("Debug", o.Name!.String);
+        Assert.Equal(["DISABLE", "ENABLE"], o.Rewards.Select(r => r.Name!.String));
+        Assert.All(o.Rewards, r => Assert.Equal(Localized.Languages.Length, r.Name!.NumLanguages));
+    }
 }
 
 public class PluginTests
@@ -647,7 +661,17 @@ public class GapCheckTests
         using var t = new TempDir();
         var stub = Stub(t.Sub("stub"), 1);
         var ex = Assert.Throws<Exception>(() => WriteWith(t, new WriteOptions { GapCheckExe = stub }));
-        Assert.Contains("exited 1", ex.Message);
+        Assert.Contains("found errors", ex.Message);
+    }
+
+    [Fact]
+    public void AGapCheckThatCouldNotCheckSaysSo()
+    {
+        using var t = new TempDir();
+        var stub = Stub(t.Sub("stub"), 2);
+        var ex = Assert.Throws<Exception>(() => WriteWith(t, new WriteOptions { GapCheckExe = stub }));
+        Assert.Contains("could not check", ex.Message);
+        Assert.Contains("exit 2", ex.Message);
     }
 
     [Fact]

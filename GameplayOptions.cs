@@ -32,7 +32,7 @@ public static class GameplayOptions
         o.Description = Localized.For(mod, description + DefaultNote(defaultOn), text);
         o.Data = new BoolGameplayOptionData { Value1 = defaultOn, Value2 = defaultOn };
         o.Rewards.Clear();
-        o.Rewards.AddRange(BoolRows(mod, text));
+        o.Rewards.AddRange(BoolRows(mod));
         if (key != null) mod.GameplayOptions.Add(o);
         return o;
     }
@@ -40,11 +40,13 @@ public static class GameplayOptions
     /// <summary>The two value rows the Creation Kit writes on every on/off option (checked 2026-11-23 against the
     /// CK-made on/off options in six other authors' plugins): VOVS empty, VORV 0 then 1, RESN "DISABLE" then
     /// "ENABLE", VORN 0. No GPOD: the CK writes GPOD (min, max, step) only on slider options, and every official
-    /// GPOF is a slider.</summary>
-    public static GameplayOptionReward[] BoolRows(StarfieldMod mod, Func<string, TranslatedString>? text = null) =>
+    /// GPOF is a slider. These are fixed values, not player text, so a builder's text: function is never called for
+    /// them (a translator that only knows the mod's own strings would fail on "DISABLE"); on a localized plugin they
+    /// get Localized.Text.</summary>
+    public static GameplayOptionReward[] BoolRows(StarfieldMod mod) =>
     [
-        new() { Description = Localized.For(mod, "", text), SettingValue = 0f, Name = Localized.For(mod, "DISABLE", text), RewardValue = 0f },
-        new() { Description = Localized.For(mod, "", text), SettingValue = 1f, Name = Localized.For(mod, "ENABLE", text), RewardValue = 0f },
+        new() { Description = Localized.For(mod, ""), SettingValue = 0f, Name = Localized.For(mod, "DISABLE"), RewardValue = 0f },
+        new() { Description = Localized.For(mod, ""), SettingValue = 1f, Name = Localized.For(mod, "ENABLE"), RewardValue = 0f },
     ];
 
     /// <summary>The debug switch, off by default. shows = what the player sees, e.g. "My Mod's log lines on screen:

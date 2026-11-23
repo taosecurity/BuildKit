@@ -43,7 +43,8 @@ public sealed class WriteOptions
     public string? GapCheckExe { get; init; }
     /// <summary>Extra folder the gap check looks in for masters before the Data folder (for example the build output).</summary>
     public string? GapCheckMastersDir { get; init; }
-    /// <summary>Throw when the gap check reports an ERROR (its exit code 1).</summary>
+    /// <summary>Throw when the gap check exits nonzero: 1 = it found an ERROR, any other code = it could not check
+    /// (a missing master, or an sf-mod-check older than 0.15.0 with no gap command).</summary>
     public bool FailOnGapErrors { get; init; } = true;
     /// <summary>Write the plugin's own new records the way Bethesda's own Starfield plugins store them: a light
     /// plugin's as FE + its index among light masters (FE000800 when it has no light masters), a medium plugin's as
@@ -209,7 +210,9 @@ public static class PluginWriter
             {
                 var exit = GapCheck(outPath, game.DataDir, options.GapCheckMastersDir, exe);
                 if (exit != 0 && options.FailOnGapErrors)
-                    throw new Exception($"{GapCheckExeName} gap exited {exit} for {outPath} (see above); fix the errors before handing the plugin over");
+                    throw new Exception(exit == 1
+                        ? $"{GapCheckExeName} gap found errors in {outPath} (see above); fix them before handing the plugin over"
+                        : $"{GapCheckExeName} gap could not check {outPath} (exit {exit}, see above): a missing master, or an {GapCheckExeName} older than 0.15.0 with no gap command?");
             }
         }
         return outPath;
@@ -241,8 +244,9 @@ public static class PluginWriter
         var name = OperatingSystem.IsWindows() ? GapCheckExeName + ".exe" : GapCheckExeName;
         foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
-            if (!Path.IsPathFullyQualified(dir)) continue;
-            var p = Path.Combine(dir, name);
+            var d = dir.Trim().Trim('"');
+            if (d.Length == 0 || !Path.IsPathFullyQualified(d)) continue;
+            var p = Path.Combine(d, name);
             if (File.Exists(p)) return p;
         }
         return null;
