@@ -1,5 +1,5 @@
-// Quest helpers: the raw QUST bytes are compared with the Creation Kit layout of vanilla quests (format notes in
-// NOTES.md "0.6.0 (GapFix)", step 1; no game files are read here).
+// Quest helpers: the raw QUST bytes are compared with the Creation Kit layout of vanilla quests (the format notes at
+// the top of QuestHelpers.cs; no game files are read here).
 using System.Text;
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.Plugins;
@@ -41,9 +41,10 @@ public class QuestHelpersTests
     }
 
     /// <summary>The made-up scene: a quest with a start stage, an end stage, two actors and three lines.</summary>
-    static (StarfieldMod Mod, Quest Quest, Scene Scene) SceneSample(ushort? endStage = 100)
+    static (StarfieldMod Mod, Quest Quest, Scene Scene) SceneSample(ushort? endStage = 100, bool extraFirst = false)
     {
         var mod = Plugin.New("QuestTest.esm", PluginStyle.Light, "test", "quests");
+        if (extraFirst) mod.Keywords.AddNew("QT_AddedLater");   // a later build adds a record first: every ID shifts
         var kw = mod.Keywords.AddNew("QT_TalkerKeyword").ToLink();
         var q = Quests.Basic(mod, "QT_Talk", "Talk");
         Quests.Stage(mod, q, 10, startUp: true);
@@ -53,6 +54,40 @@ public class QuestHelpersTests
         var s = Quests.Scene(mod, q, "QT_Talk_Scene", a, b,
             [new(0, "Morning. Need anything?"), new(1, "Just a box."), new(0, "Third shelf.")], endStage: endStage);
         return (mod, q, s);
+    }
+
+    [Fact]
+    public void SceneRecordsCanBeLocked()
+    {
+        // IdLock (the README quick start) needs an EditorID on every own record, so the scene's topics and lines
+        // get one too, and a second build keeps every FormID.
+        using var t = new TempDir();
+        var lockPath = Path.Combine(t.Path, "ids.lock.json");
+        var (mod, _, _) = SceneSample();
+        var r1 = IdLock.Apply(mod, lockPath);
+        Assert.Equal(0, r1.Moved);
+        Assert.Contains(mod.EnumerateMajorRecords(), r => r.EditorID == "QT_Talk_Scene_Line01_Info");
+        var ids = mod.EnumerateMajorRecords().ToDictionary(r => r.EditorID!, r => r.FormKey);
+        var (again, _, _) = SceneSample();
+        IdLock.Apply(again, lockPath, update: false);   // throws if anything would move or be added
+        Assert.Equal(ids, again.EnumerateMajorRecords().ToDictionary(r => r.EditorID!, r => r.FormKey));
+
+        // A later build with a new record first: the quest, scene, topics and lines move back to their locked IDs,
+        // stay in the quest's children, and every link still points at the right record.
+        var (moved, _, _) = SceneSample(extraFirst: true);
+        Assert.True(IdLock.Apply(moved, lockPath).Moved > 0);
+        var game = new GameData(t.Path);
+        var back = StarfieldMod.CreateFromBinaryOverlay(Write(moved, t, game), StarfieldRelease.Starfield);
+        foreach (var r in back.EnumerateMajorRecords().Where(r => ids.ContainsKey(r.EditorID!)))
+            Assert.Equal(ids[r.EditorID!].ID, r.FormKey.ID);
+        var bq = back.Quests.Single();
+        Assert.Equal(3, bq.DialogTopics.Count);
+        var bs = bq.Scenes.Single();
+        Assert.Equal(bq.FormKey, bs.Quest.FormKey);
+        var topics = bq.DialogTopics.Select(d => d.FormKey).ToList();
+        Assert.Equal(topics, bs.Actions!.OfType<IDialogueSceneActionGetter>().Select(a => a.Topic.FormKey));
+        Assert.All(bq.DialogTopics, d => Assert.Equal(bq.FormKey, d.Quest.FormKey));
+        Assert.All(bq.DialogTopics, d => Assert.Equal(d.Responses.Single().FormKey, d.TopicInfoList!.Single().FormKey));
     }
 
     [Fact]
@@ -68,17 +103,22 @@ public class QuestHelpersTests
         const string action = "ANAM,NAM0,ALID,INAM,FNAM,SNAM,ENAM,DATA,DMAX,DMIN,HNAM,HNAM,ANAM,";
         Assert.Equal("EDID,FNAM," + phase + phase + phase + actor + actor + action + action + action + "PNAM,INAM,VNAM,SCQS,BOLV,XNAM",
             string.Join(",", scen.Select(f => f.Sig)));
-        foreach (var dial in Records(bytes, "DIAL"))
-            Assert.Equal("PNAM,QNAM,DATA,SNAM,TIFL,TIFC", string.Join(",", dial.Fields.Select(f => f.Sig)));
+        // Vanilla scene topics and lines have no EDID; BuildKit adds one (for IdLock), then the vanilla order.
+        var dials = Records(bytes, "DIAL");
+        for (var i = 0; i < dials.Count; i++)
+        {
+            Assert.Equal("EDID,PNAM,QNAM,DATA,SNAM,TIFL,TIFC", string.Join(",", dials[i].Fields.Select(f => f.Sig)));
+            Assert.Equal(Encoding.ASCII.GetBytes($"QT_Talk_Scene_Line{i + 1:D2}\0"), dials[i].Fields[0].Data);
+        }
         var infos = Records(bytes, "INFO");
         Assert.Equal(3, infos.Count);
         // Vanilla scene lines: ENAM,TRDA,TROT,NAM1,NAM2,NAM3,NAM4,NAM9,NAM0,INAM. TROT (voice types) and NAM9 (a CK
         // hash) only come from the Creation Kit's voice and edit data, so a built line has neither.
         foreach (var info in infos)
         {
-            Assert.Equal("ENAM,TRDA,NAM1,NAM2,NAM3,NAM4,NAM0,INAM", string.Join(",", info.Fields.Select(f => f.Sig)));
-            Assert.Equal(new byte[4], info.Fields[0].Data);                                        // ENAM flags 0
-            Assert.Equal(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF }, info.Fields[1].Data[..4]);         // no emotion
+            Assert.Equal("EDID,ENAM,TRDA,NAM1,NAM2,NAM3,NAM4,NAM0,INAM", string.Join(",", info.Fields.Select(f => f.Sig)));
+            Assert.Equal(new byte[4], info.Fields[1].Data);                                        // ENAM flags 0
+            Assert.Equal(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF }, info.Fields[2].Data[..4]);         // no emotion
             Assert.Equal(BitConverter.GetBytes(1u), info.Fields[^1].Data);                         // INAM 1
         }
     }
@@ -289,7 +329,7 @@ public class QuestHelpersTests
         var want = new MemoryStream();
         var w = new BinaryWriter(want);
         void WStr(string s) { var b = Encoding.ASCII.GetBytes(s); w.Write((ushort)b.Length); w.Write(b); }
-        // The layout read from vanilla MQ_TutorialQuest_Misc02 (PMTGuide\GapFix\bk-0.6.0\vmad_shape.py, 252 of 252 bytes).
+        // The layout read from vanilla MQ_TutorialQuest_Misc02 (all 252 bytes matched).
         w.Write((short)6); w.Write((ushort)2); w.Write((ushort)0);          // version, object format, no scripts
         w.Write((byte)3); w.Write((ushort)3);                              // extra bind version, one fragment per stage
         WStr(name); w.Write((byte)0); w.Write((ushort)0);                  // fragment script: Local, no properties

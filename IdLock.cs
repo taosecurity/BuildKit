@@ -72,8 +72,16 @@ public static class IdLock
         if (moves.Count > 0)
         {
             var remap = moves.ToDictionary(r => r.FormKey, r => new FormKey(mod.ModKey, target[r.FormKey]));
-            var copies = moves.Select(r => ((IMajorRecord)r.Duplicate(remap[r.FormKey]), r.Registration.GetterType)).ToList();
-            foreach (var r in moves) mod.Remove(r.FormKey, r.Registration.GetterType);
+            // Records inside another record or a cell block (a quest's topics and scenes, a topic's responses, cells
+            // and their references) are replaced in their parent's list, children first, so a moved parent's copy
+            // carries its moved children.
+            var original = new HashSet<object>(own, ReferenceEqualityComparer.Instance);
+            var nested = new HashSet<object>(ReferenceEqualityComparer.Instance);
+            MoveChildren(mod.Cells, remap, original, nested);   // interior cells live in blocks, not a plain group
+            foreach (var r in own) MoveChildren(r, remap, original, nested);
+            var topMoves = moves.Where(r => !nested.Contains(r)).ToList();
+            var copies = topMoves.Select(r => ((IMajorRecord)r.Duplicate(remap[r.FormKey]), r.Registration.GetterType)).ToList();
+            foreach (var r in topMoves) mod.Remove(r.FormKey, r.Registration.GetterType);
             foreach (var (copy, type) in copies) mod.GetTopLevelGroup(type).AddUntyped(copy);
             mod.RemapLinks(remap);
         }
@@ -82,5 +90,28 @@ public static class IdLock
         var json = JsonSerializer.Serialize(ordered, new JsonSerializerOptions { WriteIndented = true }) + "\n";
         if (!File.Exists(lockPath) || File.ReadAllText(lockPath) != json) File.WriteAllText(lockPath, json);
         return new IdLockResult(locked.Count, added, moves.Count, lockPath);
+    }
+
+    /// <summary>Replaces every original record in <paramref name="parent"/>'s lists of records (and theirs, deepest
+    /// first) that <paramref name="remap"/> moves with a copy under its new FormKey, and notes each one found as
+    /// nested.</summary>
+    static void MoveChildren(object parent, Dictionary<FormKey, FormKey> remap, HashSet<object> original, HashSet<object> nested)
+    {
+        foreach (var p in parent.GetType().GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (p.GetIndexParameters().Length > 0 || !p.PropertyType.IsGenericType) continue;
+            var item = p.PropertyType.GetGenericArguments();
+            // Lists of records, and the cell blocks and sub-blocks (not records) that hold cells.
+            if (item.Length != 1 || !(typeof(IMajorRecordGetter).IsAssignableFrom(item[0]) || item[0].Name.EndsWith("Block"))) continue;
+            if (p.GetValue(parent) is not System.Collections.IList list) continue;
+            for (var i = 0; i < list.Count; i++)
+            {
+                if (list[i] is { } block && block is not IMajorRecordGetter) { MoveChildren(block, remap, original, nested); continue; }
+                if (list[i] is not IMajorRecord child || !original.Contains(child)) continue;
+                nested.Add(child);
+                MoveChildren(child, remap, original, nested);
+                if (remap.TryGetValue(child.FormKey, out var to)) list[i] = child.Duplicate(to);
+            }
+        }
     }
 }

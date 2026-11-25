@@ -185,6 +185,39 @@ public class IdLockTests
         Assert.True(reordered.ModHeader.Stats.NextFormID > 0x803);
     }
 
+    static StarfieldMod WithCell(bool extraFirst)
+    {
+        var m = Plugin.New("Lock.esm", PluginStyle.Light, "test", "test");
+        if (extraFirst) m.Globals.AddNew("AddedLater");
+        var misc = m.MiscItems.AddNew("Misc");
+        var cell = new Cell(m) { EditorID = "Cell", Flags = Cell.Flag.IsInteriorCell };
+        cell.Temporary.Add(new PlacedObject(m) { EditorID = "Ref", Base = new FormLinkNullable<IPlaceableObjectGetter>(misc.FormKey) });
+        m.Cells.Add(new CellBlock
+        {
+            GroupType = GroupTypeEnum.InteriorCellBlock,
+            SubBlocks = [new CellSubBlock { GroupType = GroupTypeEnum.InteriorCellSubBlock, Cells = [cell] }],
+        });
+        return m;
+    }
+
+    [Fact]
+    public void LockMovesCellsAndTheirReferences()
+    {
+        // 0.5.0 threw "Unknown major record type" when a cell or a record inside another had to move back.
+        using var t = new TempDir();
+        var lockPath = Path.Combine(t.Path, "ids.lock.json");
+        var first = WithCell(false);
+        IdLock.Apply(first, lockPath);
+        var ids = first.EnumerateMajorRecords().ToDictionary(r => r.EditorID!, r => r.FormKey.ID);
+        var later = WithCell(true);
+        Assert.True(IdLock.Apply(later, lockPath).Moved > 0);
+        var cell = later.Cells.Single().SubBlocks.Single().Cells.Single();
+        Assert.Equal(ids["Cell"], cell.FormKey.ID);
+        var placed = (IPlacedObjectGetter)cell.Temporary.Single();
+        Assert.Equal(ids["Ref"], placed.FormKey.ID);
+        Assert.Equal(ids["Misc"], placed.Base.FormKey.ID);
+    }
+
     [Fact]
     public void MissingLockedRecordStopsTheBuild()
     {

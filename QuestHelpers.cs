@@ -1,7 +1,7 @@
 // Quest helpers: a quest with its flags and priority, stages with their log entries, objectives with their targets,
 // and the stage fragment script that links them (SetObjectiveDisplayed and the like live in the quest's fragment
 // script, not in record fields). Field order and fixed values copy the Creation Kit's layout of vanilla quests
-// (Starfield.esm MQ_TutorialQuest_Misc02, LC139 and BE_SC04_Misc; format notes in NOTES.md "0.6.0 (GapFix)"):
+// (Starfield.esm MQ_TutorialQuest_Misc02, LC139 and BE_SC04_Misc; the format notes follow):
 //   DNAM   flags u16 (RunOnce 0x100, StartGameEnabled 0x1), priority at byte 4
 //   stage  INDX (index, flags 0x02 for the start-up stage, 0xAB), one log entry always: QSDT, NAM2 editor note and
 //          CNAM log text (each only when given), QSRD [4] 0, QSRD empty
@@ -193,7 +193,8 @@ public static partial class Quests
     /// beginOnQuestStart = the scene starts when the quest does (otherwise start it from a fragment with
     /// <c>Scene.Start()</c>); it always stops when the quest stops. endStage = the quest stage set when the scene ends
     /// (it must exist on the quest). key = a fixed FormID for the scene (the topics and responses get the next free
-    /// ones); text = how to make the text (default: <see cref="Localized.For"/>).</summary>
+    /// ones, with the EditorIDs <c>&lt;editorId&gt;_Line01</c> and <c>&lt;editorId&gt;_Line01_Info</c> and so on, so
+    /// <see cref="IdLock"/> can lock them); text = how to make the text (default: <see cref="Localized.For"/>).</summary>
     public static Scene Scene(StarfieldMod mod, Quest quest, string editorId, QuestReferenceAlias first, QuestReferenceAlias second,
         IEnumerable<SceneLine> lines, ushort? endStage = null, bool beginOnQuestStart = true,
         FormKey? key = null, Func<string, TranslatedString>? text = null, ushort? formVersion = Plugin.CkFormVersion)
@@ -223,8 +224,11 @@ public static partial class Quests
         for (var i = 0; i < list.Count; i++)
         {
             scene.Phases.Add(new ScenePhase { Name = "", EditorWidth = 500 });
+            // EditorIDs (vanilla scene topics and lines have none) so IdLock can keep their FormIDs between builds.
+            var lineId = $"{editorId}_Line{i + 1:D2}";
             var topic = new DialogTopic(mod.GetNextFormKey(), StarfieldRelease.Starfield)
             {
+                EditorID = lineId,
                 Priority = 50f,
                 Quest = new FormLink<IQuestGetter>(quest.FormKey),
                 Category = DialogTopic.CategoryEnum.Scene,
@@ -234,6 +238,7 @@ public static partial class Quests
             if (formVersion is { } tv) topic.FormVersion = tv;
             var info = new DialogResponses(mod.GetNextFormKey(), StarfieldRelease.Starfield)
             {
+                EditorID = lineId + "_Info",
                 Flags = new DialogResponseFlags(),                              // ENAM 0
                 SubtitlePriority = DialogResponses.SubtitlePriorityLevel.Low,   // INAM 1, as on every vanilla scene line
             };

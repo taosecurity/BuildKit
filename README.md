@@ -212,7 +212,9 @@ File.WriteAllText(psc, f.Source());   // Scripts\Source\Fragments\Quests\QF_MM_E
 - **Aliases** get the Creation Kit's numbering (one more than the highest alias ID). Pass records as
   `record.ToLink()`. `optional: true` lets the quest start when the alias can't be filled.
 - **Scenes** give each line its own phase, dialogue action and scene topic with one response. Actor 0 is the first
-  alias and 1 the second. BuildKit writes no voice files or lip files, and the scene uses only dialogue actions.
+  alias and 1 the second. The topics and responses are named `<scene>_Line01`, `<scene>_Line01_Info` and so on,
+  so `IdLock` keeps their FormIDs too. BuildKit writes no voice files or lip files, and the scene uses only
+  dialogue actions.
 - Each helper throws on a mistake it can see, with a message that names the fix: a repeated stage, objective,
   alias or scene name, an alias from another quest, a scene end stage or a fragment stage the quest lacks, or an
   EditorID that can't name a Papyrus script.
