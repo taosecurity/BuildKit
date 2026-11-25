@@ -97,8 +97,13 @@ public static partial class Quests
     /// stage that shows them. Show and complete it from a stage with <see cref="Fragments"/>. A repeated index
     /// throws.</summary>
     public static QuestObjective Objective(StarfieldMod mod, Quest quest, ushort index, string displayText,
-        IEnumerable<AQuestAlias>? targets = null, Func<string, TranslatedString>? text = null) =>
-        Objective(mod, quest, index, displayText, (targets ?? []).Select(AliasId), text);
+        IEnumerable<AQuestAlias>? targets = null, Func<string, TranslatedString>? text = null)
+    {
+        var list = (targets ?? []).ToList();
+        if (list.FirstOrDefault(t => !HasAlias(quest, t)) is { } other)
+            throw new ArgumentException($"Alias \"{AliasName(other)}\" is not on {quest.EditorID}: add it first.", nameof(targets));
+        return Objective(mod, quest, index, displayText, list.Select(AliasId), text);
+    }
 
     /// <summary><see cref="Objective(StarfieldMod, Quest, ushort, string, IEnumerable{AQuestAlias}?, Func{string, TranslatedString}?)"/>
     /// with the targets given by alias ID.</summary>

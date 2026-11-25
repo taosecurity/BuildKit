@@ -74,6 +74,9 @@ public class QuestHelpersTests
         var boxA = Quests.FindAlias(qa, "Box", kw);
         Quests.FindAlias(qb, "Box", kw);   // equal by value to boxA
         Assert.Throws<ArgumentException>(() => Quests.CreatedAlias(qb, "Made", kw, boxA));
+        // Round 2 review: an objective target from another quest was written as this quest's alias ID.
+        Assert.Throws<ArgumentException>(() => Quests.Objective(mod, qb, 10, "Find it", [boxA]));
+        Assert.Empty(qb.Objectives);
     }
 
     [Fact]
