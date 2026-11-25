@@ -57,6 +57,26 @@ public class QuestHelpersTests
     }
 
     [Fact]
+    public void AliasHelpersCountCollectionAliasesAndRefuseAnEqualAliasOfAnotherQuest()
+    {
+        // Round 1 review: a hand-made collection alias made NextAliasId throw, and Contains compared by value.
+        var mod = Plugin.New("QuestTest.esm", PluginStyle.Light, "test", "quests");
+        var kw = mod.Keywords.AddNew("QT_Kw").ToLink();
+        var q = Quests.Basic(mod, "QT_A", "A");
+        var c = new QuestCollectionAlias();
+        c.Collection.Add(new CollectionAlias { ID = 4, ReferenceAlias = new QuestReferenceAlias { ID = 5, Name = "Inner" } });
+        q.Aliases!.Add(c);
+        Assert.Equal(6u, Quests.NextAliasId(q));
+        Assert.Equal(6u, Quests.FindAlias(q, "Next", kw).ID);
+
+        var qa = Quests.Basic(mod, "QT_B", "B");
+        var qb = Quests.Basic(mod, "QT_C", "C");
+        var boxA = Quests.FindAlias(qa, "Box", kw);
+        Quests.FindAlias(qb, "Box", kw);   // equal by value to boxA
+        Assert.Throws<ArgumentException>(() => Quests.CreatedAlias(qb, "Made", kw, boxA));
+    }
+
+    [Fact]
     public void SceneRecordsCanBeLocked()
     {
         // IdLock (the README quick start) needs an EditorID on every own record, so the scene's topics and lines

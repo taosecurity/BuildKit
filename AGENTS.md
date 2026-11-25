@@ -78,7 +78,8 @@ installed, the line is replaced by the check's own `gap check:` output ending in
    Link stages with `var f = Quests.Fragments(q).ShowObjective(10, 10).CompleteQuest(20); f.Apply();`, write
    `f.Source()` to `Scripts\Source\` + `f.SourcePath`, and compile it with the mod's other Papyrus scripts (the
    `.pex` ships in `Scripts\Fragments\Quests\`). Without that `.pex`, `sf-mod-check check` reports the script
-   missing and the stages do nothing. README.md, "Quests", has a full example.
+   missing and the stages do nothing. Call `f.Apply()` before `IdLock.Apply`. README.md, "Quests", has a full
+   example.
 
 ## 6. Inputs, outputs, exit codes, log
 

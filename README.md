@@ -208,7 +208,9 @@ File.WriteAllText(psc, f.Source());   // Scripts\Source\Fragments\Quests\QF_MM_E
   are script lines in the quest's fragment script, as in the Creation Kit. `Fragments` collects them (any other line
   with `Line(stage, "...")`), `Apply()` writes the fragment entries into the quest, and `Source()` gives the script.
   Compile it with your own scripts (`Starfield_Papyrus_Flags.flg`, the game's sources as imports) and ship the
-  `.pex` in `Scripts\Fragments\Quests\` (loose or in your archive). Call `Apply()` after the last stage is added.
+  `.pex` in `Scripts\Fragments\Quests\` (loose or in your archive). Call `Apply()` after the last stage is added and before `IdLock.Apply`
+  (IdLock replaces the quest with a copy, so a later `Apply()` would go to the old one). The script name holds the
+  quest's FormID at the time `Fragments` is called, so if a build shifts that ID, delete the old `QF_` files.
 - **Aliases** get the Creation Kit's numbering (one more than the highest alias ID). Pass records as
   `record.ToLink()`. `optional: true` lets the quest start when the alias can't be filled.
 - **Scenes** give each line its own phase, dialogue action and scene topic with one response. Actor 0 is the first

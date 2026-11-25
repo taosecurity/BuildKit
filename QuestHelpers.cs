@@ -126,8 +126,11 @@ public static partial class Quests
 
     /// <summary>The next free alias ID of <paramref name="quest"/>: one more than the highest ID over all its aliases
     /// (0 for none), as the Creation Kit numbers them. Mutagen writes it as ANAM.</summary>
-    public static uint NextAliasId(Quest quest) =>
-        quest.Aliases is { Count: > 0 } a ? (uint)a.Max(AliasId) + 1 : 0;
+    public static uint NextAliasId(Quest quest)
+    {
+        var ids = quest.Aliases?.SelectMany(UsedAliasIds).ToList() ?? [];
+        return ids.Count > 0 ? ids.Max() + 1 : 0;
+    }
 
     /// <summary>A reference alias filled with a fixed placed reference (ALFR). optional = the quest still starts if the
     /// reference can't be filled.</summary>
@@ -159,7 +162,7 @@ public static partial class Quests
     public static QuestReferenceAlias CreatedAlias(Quest quest, string name, IFormLinkGetter<IStarfieldMajorRecordGetter> baseObject,
         QuestReferenceAlias atAlias, bool inside = false, bool optional = false)
     {
-        if (quest.Aliases?.Contains(atAlias) != true)
+        if (!HasAlias(quest, atAlias))
             throw new ArgumentException($"Alias \"{atAlias.Name}\" is not on {quest.EditorID}: add it first.", nameof(atAlias));
         var a = RefAlias(quest, name, AQuestAlias.Flag.CreateRefTemp, optional);
         a.CreateReferenceToObject = new CreateReferenceToObject
@@ -201,7 +204,7 @@ public static partial class Quests
     {
         if (string.IsNullOrWhiteSpace(editorId)) throw new ArgumentException("A scene needs an EditorID.", nameof(editorId));
         foreach (var (a, n) in new[] { (first, nameof(first)), (second, nameof(second)) })
-            if (quest.Aliases?.Contains(a) != true)
+            if (!HasAlias(quest, a))
                 throw new ArgumentException($"Alias \"{a.Name}\" is not on {quest.EditorID}: add it first.", n);
         if (first == second) throw new ArgumentException("The two actors must be different aliases.", nameof(second));
         var list = lines.ToList();
@@ -301,6 +304,9 @@ public static partial class Quests
             throw new ArgumentException($"{quest.EditorID} already has an alias named \"{name}\".", nameof(name));
     }
 
+    // By reference: Mutagen's Equals compares values, so an equal alias of another quest would pass.
+    static bool HasAlias(Quest quest, AQuestAlias alias) => quest.Aliases?.Any(x => ReferenceEquals(x, alias)) == true;
+
     static T Add<T>(Quest quest, T alias) where T : AQuestAlias
     {
         (quest.Aliases ??= new ExtendedList<AQuestAlias>()).Add(alias);
@@ -319,6 +325,16 @@ public static partial class Quests
         QuestReferenceAlias r => checked((int)r.ID),
         QuestLocationAlias l => checked((int)l.ID),
         _ => throw new ArgumentException($"{alias.GetType().Name} has no alias ID BuildKit can read.", nameof(alias)),
+    };
+
+    /// <summary>Every alias ID an alias uses: its own, or for a collection alias each entry's ID and its reference
+    /// alias's ID.</summary>
+    static IEnumerable<uint> UsedAliasIds(AQuestAlias alias) => alias switch
+    {
+        QuestReferenceAlias r => [r.ID],
+        QuestLocationAlias l => [l.ID],
+        QuestCollectionAlias c => c.Collection.SelectMany(x => new[] { x.ID, x.ReferenceAlias.ID }).OfType<uint>(),
+        _ => [],
     };
 }
 

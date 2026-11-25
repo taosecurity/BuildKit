@@ -218,6 +218,42 @@ public class IdLockTests
         Assert.Equal(ids["Misc"], placed.Base.FormKey.ID);
     }
 
+    static StarfieldMod WithOverrideCell(bool extraFirst)
+    {
+        var m = Plugin.New("Lock.esm", PluginStyle.Light, "test", "test");
+        if (extraFirst) m.Globals.AddNew("AddedLater");
+        var misc = m.MiscItems.AddNew("Misc");
+        // An override of a vanilla interior cell, holding our own reference, and our own worldspace with its top cell.
+        var vanilla = new Cell(FormKey.Factory("0ABCDE:Starfield.esm"), StarfieldRelease.Starfield) { Flags = Cell.Flag.IsInteriorCell };
+        vanilla.Temporary.Add(new PlacedObject(m) { EditorID = "Ref", Base = new FormLinkNullable<IPlaceableObjectGetter>(misc.FormKey) });
+        m.Cells.Add(new CellBlock
+        {
+            GroupType = GroupTypeEnum.InteriorCellBlock,
+            SubBlocks = [new CellSubBlock { GroupType = GroupTypeEnum.InteriorCellSubBlock, Cells = [vanilla] }],
+        });
+        var world = m.Worldspaces.AddNew("World");
+        world.TopCell = new Cell(m) { EditorID = "TopCell" };
+        return m;
+    }
+
+    [Fact]
+    public void LockMovesOwnRecordsInOverridesAndSingleRecordFields()
+    {
+        // Round 1 review: an own reference in an override cell, and a worldspace's top cell, still threw.
+        using var t = new TempDir();
+        var lockPath = Path.Combine(t.Path, "ids.lock.json");
+        var first = WithOverrideCell(false);
+        IdLock.Apply(first, lockPath);
+        var ids = first.EnumerateMajorRecords().Where(r => r.FormKey.ModKey == first.ModKey).ToDictionary(r => r.EditorID!, r => r.FormKey.ID);
+        var later = WithOverrideCell(true);
+        Assert.True(IdLock.Apply(later, lockPath).Moved > 0);
+        var cell = later.Cells.Single().SubBlocks.Single().Cells.Single();
+        Assert.Equal(ids["Ref"], cell.Temporary.Single().FormKey.ID);
+        var world = later.Worldspaces.Single();
+        Assert.Equal(ids["World"], world.FormKey.ID);
+        Assert.Equal(ids["TopCell"], world.TopCell!.FormKey.ID);
+    }
+
     [Fact]
     public void MissingLockedRecordStopsTheBuild()
     {

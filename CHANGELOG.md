@@ -31,8 +31,9 @@ and `sf-mod-check check` on the plugin then printed `RESULT: OK, 0 errors, 0 war
 - `Quests.Fragments(quest)` collects the stage links (`ShowObjective`, `CompleteObjective`, `SetStage`, `CompleteQuest` or any Papyrus `Line`). `Apply()` writes the fragment entries into the quest, and `Source()` returns the fragment script (`ScriptName`, `SourcePath`) for the builder to compile with its own scripts.
 - The helpers throw on mistakes they can see (a repeated stage, objective, alias or scene, an alias from another quest, a missing end stage or fragment stage, an EditorID that can't name a script), with a message that names the fix.
 - A blank or whitespace `WriteOptions.GapCheckExe` now counts as not set, so the gap check falls back to `BUILDKIT_SFMODCHECK` and then PATH, as a blank variable already did. Before, it threw.
-- `IdLock.Apply` can now move records that live inside another record or in a cell block (a quest's scene topics, responses and scenes, cells and their placed references) back to their locked FormIDs. Before, a later build that shifted their IDs (for example by adding a record ahead of them) stopped with "Unknown major record type".
-- 22 new tests (110 in all) compare the helpers' raw output with the vanilla layouts by bytes and check that a quest with a scene, and a cell with a reference, keep their FormIDs through `IdLock`.
+- `IdLock.Apply` can now move records that live inside another record or in a cell block (a quest's scene topics, responses and scenes, cells and their placed references, our own references in an override of a vanilla cell, a worldspace's top cell) back to their locked FormIDs. Before, a later build that shifted their IDs (for example by adding a record ahead of them) stopped with "Unknown major record type".
+- `Quests.NextAliasId` and the alias helpers count the IDs inside a collection alias added by hand, instead of throwing.
+- 24 new tests (112 in all) compare the helpers' raw output with the vanilla layouts by bytes and check that a quest with a scene, and a cell with a reference, keep their FormIDs through `IdLock`.
 
 ### Not yet
 

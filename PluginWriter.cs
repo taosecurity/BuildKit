@@ -252,7 +252,7 @@ public static class PluginWriter
             (exe, source) = (env, GapCheckExeVariable);
         }
         if (Path.GetExtension(exe).Equals(".py", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException($"{source} names the Python script {exe}: BuildKit 0.5.0 runs {GapCheckExeName} instead; name its exe");
+            throw new ArgumentException($"{source} names the Python script {exe}: BuildKit runs {GapCheckExeName} instead; name its exe");
         if (!Path.IsPathFullyQualified(exe))
             throw new ArgumentException($"{source} is {exe}: give the full path of {GapCheckExeName} (a relative path would run whatever is in the current folder)");
         if (!File.Exists(exe))

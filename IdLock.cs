@@ -78,7 +78,8 @@ public static class IdLock
             var original = new HashSet<object>(own, ReferenceEqualityComparer.Instance);
             var nested = new HashSet<object>(ReferenceEqualityComparer.Instance);
             MoveChildren(mod.Cells, remap, original, nested);   // interior cells live in blocks, not a plain group
-            foreach (var r in own) MoveChildren(r, remap, original, nested);
+            // Every record, overrides too: an own reference can sit in an override of a vanilla cell or worldspace.
+            foreach (var r in mod.EnumerateMajorRecords().ToList()) MoveChildren(r, remap, original, nested);
             var topMoves = moves.Where(r => !nested.Contains(r)).ToList();
             var copies = topMoves.Select(r => ((IMajorRecord)r.Duplicate(remap[r.FormKey]), r.Registration.GetterType)).ToList();
             foreach (var r in topMoves) mod.Remove(r.FormKey, r.Registration.GetterType);
@@ -99,7 +100,19 @@ public static class IdLock
     {
         foreach (var p in parent.GetType().GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
         {
-            if (p.GetIndexParameters().Length > 0 || !p.PropertyType.IsGenericType) continue;
+            if (p.GetIndexParameters().Length > 0) continue;
+            // A single record held in a property (a cell's landscape, a worldspace's top cell).
+            if (typeof(IMajorRecordGetter).IsAssignableFrom(p.PropertyType))
+            {
+                if (p.CanWrite && p.GetValue(parent) is IMajorRecord one && original.Contains(one))
+                {
+                    nested.Add(one);
+                    MoveChildren(one, remap, original, nested);
+                    if (remap.TryGetValue(one.FormKey, out var oneTo)) p.SetValue(parent, one.Duplicate(oneTo));
+                }
+                continue;
+            }
+            if (!p.PropertyType.IsGenericType) continue;
             var item = p.PropertyType.GetGenericArguments();
             // Lists of records, and the cell blocks and sub-blocks (not records) that hold cells.
             if (item.Length != 1 || !(typeof(IMajorRecordGetter).IsAssignableFrom(item[0]) || item[0].Name.EndsWith("Block"))) continue;
