@@ -728,6 +728,23 @@ public class GapCheckTests
     }
 
     [Fact]
+    public void ABlankGapCheckExeFallsBackToTheVariable()
+    {
+        using var t = new TempDir();
+        var stub = Stub(t.Sub("stub"), 0);
+        var oldVar = Environment.GetEnvironmentVariable(PluginWriter.GapCheckExeVariable);
+        try
+        {
+            Environment.SetEnvironmentVariable(PluginWriter.GapCheckExeVariable, stub);
+            foreach (var blank in new[] { "", "   ", "\"\"", " \" \" " })
+                Assert.Equal(stub, PluginWriter.ResolveSfModCheck(blank, "WriteOptions.GapCheckExe"));
+            WriteWith(t, new WriteOptions { GapCheckExe = "  " });
+            Assert.True(File.Exists(Path.Combine(t.Path, "stub", "args.txt")));
+        }
+        finally { Environment.SetEnvironmentVariable(PluginWriter.GapCheckExeVariable, oldVar); }
+    }
+
+    [Fact]
     public void ARelativeOrPythonPathIsRefused()
     {
         using var t = new TempDir();

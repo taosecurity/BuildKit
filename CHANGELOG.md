@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.6.0 (not released yet)
+
+### What's new
+
+Quest helpers: a builder can now make a working quest without raw record work. `Quests.Basic`, `Quests.Stage`, `Quests.Objective`, four alias helpers, `Quests.Scene` and `Quests.Fragments` write stages, objectives, aliases, a simple two-actor scene and the stage fragment script with the field order and fixed values the Creation Kit writes on vanilla quests. Existing builders keep working unchanged.
+
+### Example
+
+A made-up quest with three stages, one objective, all four kinds of alias, a three-line scene and its fragment script (the README's "Quests" example, with its own keyword, location, item and placed box) was written against the Steam copy of Starfield.esm. Its compiled fragment script sat beside the plugin. The build printed:
+
+      BuildKit: Bethesda fields filled: 0 message back-out index, 0 form list add-to-list, 0 model light layer, 1 keyword, 0 story-manager quest node
+      BuildKit: form version 582 set on 5 own records left at Mutagen's 576
+      BuildKit: header interior cell count (INCC) set to 1 (was unset)
+      BuildKit: own records written in Bethesda's FE FormID form (light plugin)
+      gap check: running D:\Tools\sf-mod-check\sf-mod-check.exe gap
+      gap check: BKQuestE2E.esm: 13 own records, 0 overrides, 0 compared with their master's copy
+      gap check:   0 error(s), 0 warning(s)
+      gap check: RESULT: OK (0 errors, 0 warnings)
+
+and `sf-mod-check check` on the plugin then printed `RESULT: OK, 0 errors, 0 warnings (BKQuestE2E.esm: 13 records, 15 links)`.
+
+### Changes
+
+- `Quests.Basic(mod, editorId, name, priority, startGameEnabled, runOnce)` makes a quest with its name and its flags and priority (DNAM; RunOnce by default, as on vanilla quests).
+- `Quests.Stage(mod, quest, index, log, startUp, end, note)` adds a stage with exactly one log entry, as the Creation Kit writes it: the player's log text, an editor-only note, a start-up flag and `StageEnd.CompleteQuest` or `FailQuest`. Stages stay sorted by index.
+- `Quests.Objective(mod, quest, index, displayText, targets)` adds an objective with one quest marker target per alias (or alias ID).
+- `Quests.ForcedAlias`, `FindAlias` (by keyword, with actors-only and closest), `CreatedAlias` (at or inside another alias) and `LocationAlias` add aliases with the Creation Kit's numbering; `optional: true` lets the quest start when the alias can't be filled. `Quests.NextAliasId` gives the next free ID.
+- `Quests.Scene(mod, quest, editorId, first, second, lines, endStage, beginOnQuestStart)` with `SceneLine(Actor, Text)` makes a two-actor scene: one phase, one dialogue action and one scene topic with one response per line, and the stage to set when it ends.
+- `Quests.Fragments(quest)` collects the stage links (`ShowObjective`, `CompleteObjective`, `SetStage`, `CompleteQuest` or any Papyrus `Line`). `Apply()` writes the fragment entries into the quest, and `Source()` returns the fragment script (`ScriptName`, `SourcePath`) for the builder to compile with its own scripts.
+- The helpers throw on mistakes they can see (a repeated stage, objective, alias or scene, an alias from another quest, a missing end stage or fragment stage, an EditorID that can't name a script), with a message that names the fix.
+- A blank or whitespace `WriteOptions.GapCheckExe` now counts as not set, so the gap check falls back to `BUILDKIT_SFMODCHECK` and then PATH, as a blank variable already did. Before, it threw.
+- 20 new tests (108 in all) compare the helpers' raw output with the vanilla layouts by bytes.
+
+### Not yet
+
+- No quest built with the helpers has been played in game yet. Scenes have no voice or lip files, and use only dialogue actions.
+- Collection aliases, quest-type and other optional quest fields, and scene package actions are not covered.
+
 ## 0.5.0 (2026-11-23)
 
 ### What's new

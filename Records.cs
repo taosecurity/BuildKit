@@ -12,7 +12,7 @@ using Noggog;
 
 namespace BuildKit;
 
-public static class Quests
+public static partial class Quests
 {
     /// <summary>A new quest with empty (not null) UnusedConditions and Aliases, so Mutagen writes NEXT and ANAM as
     /// the Creation Kit does. Flags, stages and aliases are left to the caller.</summary>

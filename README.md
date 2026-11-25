@@ -118,7 +118,7 @@ Mutagen version to the same project.
 | `Plugin` | `Plugin.New(fileName, style, author, description, localized)` makes a master plugin with the Creation Kit's header (Master plus Light or Medium flag, form version 582). `IdRange(style)` gives the FormIDs a style may use. |
 | `PluginWriter` | `Write(mod, outDir, game, options)` fills effect data, writes ONAM like the Creation Kit, takes master flags from the open masters, lists masters in load order and writes on one thread, so the same build gives the same bytes. See the options below. |
 | `Effects` | `New(baseEffect, magnitude, area, duration)` makes an effect entry. `Fix(list)` and `FixAll(mod)` fill a missing EFIF (0) and MUID (position + 1, never a duplicate). Without them, effects on spells, enchantments and ingestibles never apply in game. |
-| `Quests` | `New(mod, editorId)` makes a quest with empty (not missing) condition and alias lists, so it's written with NEXT and ANAM like a Creation Kit quest. A quest made with plain `AddNew` has neither. |
+| `Quests` | `New(mod, editorId)` makes a quest with empty (not missing) condition and alias lists, so it's written with NEXT and ANAM like a Creation Kit quest. A quest made with plain `AddNew` has neither. `Basic`, `Stage`, `Objective`, the alias helpers, `Scene` and `Fragments` build a working quest in the Creation Kit's layout (see "Quests" below). |
 | `DialogTopics` | `FixSubtypeNames(mod)` fills a blank SubtypeName (SNAM) on every dialogue topic with the code that matches its Subtype, as vanilla topics have. `PluginWriter.Write` calls it for you. |
 | `IdLock` | `Apply(mod, lockPath)` keeps every own record's FormID the same from build to build, using a JSON file of EditorID to FormID. New records get the next free ID. The build stops if a locked record disappears, if two records share an EditorID, or if a record has no EditorID. `update: false` only checks. |
 | `GameplayOptions` | `Debug(...)` makes a "Show Debug Messages (PC only)" option, off by default, for Settings > Gameplay Options. `Bool(...)` makes other on/off options (both carry the two value rows the Creation Kit writes for an on/off option), and `Group(...)` makes the mod's own options group. Create the options first and the group last. |
@@ -167,6 +167,58 @@ kw.Name = Localized.For(mod, "Shiny");                                 // nine l
 var weapon = mod.Weapons.AddNew("MM_Weapon");
 weapon.Name = Localized.For(mod, "Laser", text: s => s.ToUpperInvariant());   // your own function wins
 ```
+
+### Quests
+
+The `Quests` helpers (since 0.6.0) make a quest with stages, objectives, aliases and a simple two-actor scene,
+with the field order and fixed values the Creation Kit writes on vanilla quests. This made-up errand starts with the
+game, shows an objective that points at a note created inside a box, plays three lines between the box's alias and
+the nearest actor with a keyword, and completes when stage 20 is set:
+
+```csharp
+var q   = Quests.Basic(mod, "MM_Errand", "A Small Errand", priority: 60, startGameEnabled: true);
+var s0  = Quests.Stage(mod, q, 0, startUp: true, note: "editor-only note");
+var s10 = Quests.Stage(mod, q, 10, log: "I was asked to find a note.");
+var s20 = Quests.Stage(mod, q, 20, log: "I found the note.", end: StageEnd.CompleteQuest);
+
+var box     = Quests.ForcedAlias(q, "Box", boxRef.ToLink());                     // a placed reference
+var speaker = Quests.FindAlias(q, "Speaker", speakerKeyword.ToLink(), actorsOnly: true, closest: true);
+var note    = Quests.CreatedAlias(q, "Note", noteItem.ToLink<IStarfieldMajorRecordGetter>(), box, inside: true);
+var place   = Quests.LocationAlias(q, "Place", location.ToLink(), optional: true);
+
+var find = Quests.Objective(mod, q, 10, "Find the note", [note]);               // the marker points at the note
+
+Quests.Scene(mod, q, "MM_Errand_Talk", box, speaker,
+    [new SceneLine(0, "Have you seen a note?"), new SceneLine(1, "Look in the box."), new SceneLine(0, "Thanks.")],
+    endStage: 10);                                                              // the scene sets stage 10 when it ends
+
+var f = Quests.Fragments(q)
+    .SetStage(s0, s10).ShowObjective(s10, find)
+    .CompleteObjective(s20, find).CompleteQuest(s20);
+f.Apply();                                                                      // the quest's script fragment entries
+var psc = Path.Combine(@"Scripts\Source", f.SourcePath);
+Directory.CreateDirectory(Path.GetDirectoryName(psc)!);
+File.WriteAllText(psc, f.Source());   // Scripts\Source\Fragments\Quests\QF_MM_Errand_<8 hex digits>.psc
+```
+
+- **Stages** keep one log entry each, as the Creation Kit writes them. `log` is the quest log text the player sees,
+  `note` is an editor-only note, `startUp` runs the stage when the quest starts, and `end` completes or fails the
+  quest when the stage is set.
+- **Stage links are Papyrus.** Showing an objective, completing it, setting the next stage and completing the quest
+  are script lines in the quest's fragment script, as in the Creation Kit. `Fragments` collects them (any other line
+  with `Line(stage, "...")`), `Apply()` writes the fragment entries into the quest, and `Source()` gives the script.
+  Compile it with your own scripts (`Starfield_Papyrus_Flags.flg`, the game's sources as imports) and ship the
+  `.pex` in `Scripts\Fragments\Quests\` (loose or in your archive). Call `Apply()` after the last stage is added.
+- **Aliases** get the Creation Kit's numbering (one more than the highest alias ID). Pass records as
+  `record.ToLink()`. `optional: true` lets the quest start when the alias can't be filled.
+- **Scenes** give each line its own phase, dialogue action and scene topic with one response. Actor 0 is the first
+  alias and 1 the second. BuildKit writes no voice files or lip files, and the scene uses only dialogue actions.
+- Each helper throws on a mistake it can see, with a message that names the fix: a repeated stage, objective,
+  alias or scene name, an alias from another quest, a scene end stage or a fragment stage the quest lacks, or an
+  EditorID that can't name a Papyrus script.
+
+Not yet tested in game: a quest built with these helpers has passed `sf-mod-check gap` and `check`, and its
+records were compared by bytes with vanilla quests, but none has been played yet.
 
 ### Write options
 
@@ -234,140 +286,6 @@ A plugin lists its masters by file name. `GameData` refuses a plugin whose maste
 plain name such as `Starfield.esm` (a folder, a drive, a network path like `\\server\share\x.esm`, or `..`), with an
 `InvalidDataException` naming the plugin. Without this check, opening a crafted mod could make Windows contact
 another computer. `GameData.IsPlainPluginName` is public for builders that read master names themselves.
-
-## More examples
-
-The three builders below were each built with BuildKit 0.5.0 and Mutagen 0.54.4. They need the same `using` lines as the
-example above plus `using Mutagen.Bethesda.Plugins;`, and each starts with
-`var dataDir = @"C:\Program Files (x86)\Steam\steamapps\common\Starfield\Data";`. The names `AuthorsMod`, `AM_`, `AMA_`,
-`MH_` and `MQ_` are made up.
-
-### An add-on for another author's mod
-
-An add-on is a plugin of your own that lists the other author's plugin as a master and points at its records. It
-changes none of them, so it can't conflict with them. Put a copy of their plugin in a folder of your own (here
-`C:\Mods\AuthorsMod`), tell `GameData` about that folder, open their plugin after `Starfield.esm`, and look their records up
-by EditorID:
-
-```csharp
-using var game = new GameData(dataDir, extraDirs: [@"C:\Mods\AuthorsMod"]);   // folders searched before Data
-game.Open("Starfield.esm");
-game.Open("AuthorsMod.esm");                     // their plugin: read only, becomes a master
-
-var mod = Plugin.New("AuthorsModAddon.esm", PluginStyle.Light, "Your Name", "Authors Mod Add-on 0.1.0");
-var theirKeyword = game.Get<IKeywordGetter>("AM_WidgetKeyword");   // stops the build if it is missing
-var theirWidget = game.Get<IMiscItemGetter>("AM_Widget");
-
-// Your own records point at theirs; nothing of theirs is copied or changed.
-var gadget = mod.MiscItems.AddNew("AMA_Gadget");
-gadget.Name = "Gadget";
-gadget.Keywords = new();
-gadget.Keywords.Add(theirKeyword.ToLink());
-var bundle = mod.FormLists.AddNew("AMA_Bundle");
-bundle.Items.Add(theirWidget.ToLink<IStarfieldMajorRecordGetter>());
-bundle.Items.Add(gadget.ToLink<IStarfieldMajorRecordGetter>());
-
-Console.WriteLine(IdLock.Apply(mod, "ids.lock.json"));
-PluginWriter.Write(mod, "out", game, new WriteOptions { GapCheckMastersDir = @"C:\Mods\AuthorsMod" });
-```
-
-- `extraDirs` folders are searched before the Data folder, so the build works without installing their mod.
-  `GameData.Get` stops the build with a message such as `no record AM_Widget in ...` if their EditorID is missing, for example after they rename it.
-- Their plugin becomes a master of yours only because your records point into it. Players need both mods loaded, and
-  yours loaded after theirs.
-- `IdLock` locks the FormIDs of your own records only. Commit `ids.lock.json`.
-- `GapCheckMastersDir` tells `sf-mod-check gap` where to find their plugin, the same as `--masters-dir`.
-
-### A magic effect and a spell
-
-An effect on a spell is an `Effect` entry that points at a `MagicEffect` record. `Effects.New` makes the entry. Mutagen
-leaves out two fields of every new entry (EFIF and MUID), and without them the effect never applies in the game.
-`PluginWriter.Write` fills them while it writes when `FixEffects` is on, which is the default; the option is named
-here so you can see where it lives:
-
-```csharp
-using var game = new GameData(dataDir);
-game.Open("Starfield.esm");
-var mod = Plugin.New("MyHeal.esm", PluginStyle.Light, "Your Name", "My Heal 0.1.0");
-var health = game.Get<IActorValueInformationGetter>("Health");
-var eitherHand = game.Get<IEquipTypeGetter>("EitherHand");
-
-// The magic effect: restores Health, once cast on yourself.
-var regen = mod.MagicEffects.AddNew("MH_RegenEffect");
-regen.Name = "Slow Heal";
-regen.Archetype = new MagicEffectArchetype { Type = MagicEffectArchetype.TypeEnum.ValueModifier };
-regen.SecondActorValue.SetTo(health);            // the actor value a Value Modifier changes
-regen.CastType = CastType.FireAndForget;
-regen.TargetType = TargetType.Self;
-regen.Flags = MagicEffect.Flag.NoArea;
-
-// The spell that uses it: Effects.New(effect, magnitude, area, duration).
-var spell = mod.Spells.AddNew("MH_SlowHealSpell");
-spell.Name = "Slow Heal";
-spell.Type = Spell.SpellType.Spell;
-spell.CastType = CastType.FireAndForget;
-spell.TargetType = TargetType.Self;
-spell.EquipmentType.SetTo(eitherHand);
-spell.Effects.Add(Effects.New(regen.ToLink<IMagicEffectGetter>(), magnitude: 5, area: 0, duration: 10));
-
-// FixEffects (on by default) fills the missing EFIF and MUID in every effect entry while writing.
-PluginWriter.Write(mod, "out", game, new WriteOptions { FixEffects = true });
-```
-
-For a Value Modifier with a duration, the magnitude is the amount per second. The actor value the effect changes is
-`SecondActorValue`. The build prints `BuildKit: EFIF/MUID filled on 1 effect entries`. If you build effects outside
-`PluginWriter.Write`, call `Effects.Fix(spell.Effects)` or `Effects.FixAll(mod)` yourself.
-
-### A script on the player alias of a quest
-
-A quest alias is a named slot that points at a record. A script on an alias is stored in the quest's own script data
-(`QuestAdapter.Aliases`) as an entry that points at the quest and the alias ID. The player alias uses the `Player`
-NPC record as its unique actor, as the game's own quests do. `Quests.New` makes the quest shell, and the alias and its
-script use plain Mutagen objects:
-
-```csharp
-using var game = new GameData(dataDir);
-game.Open("Starfield.esm");
-var mod = Plugin.New("MyQuest.esm", PluginStyle.Light, "Your Name", "My Quest 0.1.0");
-var playerNpc = game.Get<INpcGetter>("Player");
-
-var quest = Quests.New(mod, "MQ_Quest");
-quest.Name = "My Quest";
-quest.Data = new QuestData { Flags = Quest.Flag.StartGameEnabled | Quest.Flag.StartsEnabled };
-
-// The player alias: alias ID 0, filled by the Player NPC, as the game's own quests do it.
-const int PlayerAliasId = 0;
-var playerAlias = new QuestReferenceAlias { ID = PlayerAliasId, Name = "Player", Flags = 0, ALFG = 0 };
-playerAlias.UniqueActor.SetTo(playerNpc);
-quest.Aliases!.Add(playerAlias);
-
-// The script on the alias (Papyrus: Scriptname MQ:PlayerAliasScript extends ReferenceAlias).
-var aliasScript = new ScriptEntry { Name = "MQ:PlayerAliasScript", Flags = ScriptEntry.Flag.Local };
-// aliasScript.Properties.Add(new ScriptObjectProperty { Name = "SomeProperty", Object = someRecord.ToLink<IStarfieldMajorRecordGetter>() });
-
-// An alias script is stored in the quest's script data: an entry that points at the quest and the alias ID.
-quest.VirtualMachineAdapter = new QuestAdapter
-{
-    Version = 6,
-    ObjectFormat = 2,
-    Aliases =
-    {
-        new QuestFragmentAlias
-        {
-            Property = new ScriptObjectProperty { Name = "", Object = quest.ToLink<IStarfieldMajorRecordGetter>(), Alias = PlayerAliasId },
-            Version = 6,
-            ObjectFormat = 2,
-            Scripts = { aliasScript },
-        },
-    },
-};
-
-PluginWriter.Write(mod, "out", game);
-```
-
-The script itself is Papyrus, compiled separately: `Scriptname MQ:PlayerAliasScript extends ReferenceAlias`. Its
-properties are listed on the `ScriptEntry`, with the same names as the `Property` lines in the `.psc`. The script on
-the quest itself goes in `QuestAdapter.Scripts` the same way.
 
 ## What BuildKit prints
 

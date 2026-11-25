@@ -7,8 +7,9 @@ Plain steps for a model helping someone build a Starfield plugin with BuildKit. 
 BuildKit is a C# library (NuGet package `Taosecurity.Starfield.BuildKit`) for programs that write Starfield plugins
 (`.esm`) with Mutagen. Use it when you write or maintain a Mutagen builder for Starfield: it opens masters with the
 right flags, writes the plugin the way Bethesda and the Creation Kit do (ONAM, EFIF/MUID, SNAM, Bethesda-style FE/FD
-FormIDs and fields), keeps FormIDs fixed between builds, adds a "Show Debug Messages (PC only)" Gameplay Option and makes Message
-records for on-screen text that also works on Xbox and PlayStation.
+FormIDs and fields), keeps FormIDs fixed between builds, adds a "Show Debug Messages (PC only)" Gameplay Option, makes Message
+records for on-screen text that also works on Xbox and PlayStation, and builds quests (stages, objectives, aliases,
+a simple scene and the stage fragment script) in the Creation Kit's layout.
 
 Don't use it for: editing a plugin by hand (use xEdit or the Creation Kit), other games, or any Mutagen version other
 than 0.54.4.
@@ -26,7 +27,7 @@ In a new or existing .NET 9 (or later) console project:
 ```
 dotnet new console -n MyBuilder
 cd MyBuilder
-dotnet add package Taosecurity.Starfield.BuildKit --version 0.5.0
+dotnet add package Taosecurity.Starfield.BuildKit --version 0.6.0
 ```
 
 ## 4. Prove the install works
@@ -69,6 +70,15 @@ installed, the line is replaced by the check's own `gap check:` output ending in
    their text in all nine languages by default; pass `text:` only to change that. For the names and descriptions
    of your own records, use `Localized.For(mod, "Text")`: all nine languages on a localized plugin, plain text on
    any other, or your own function with `Localized.For(mod, "Text", text: myFunction)`.
+7. A quest: `var q = Quests.Basic(mod, "MM_Quest", "Name", startGameEnabled: true);`, then
+   `Quests.Stage(mod, q, 10, log: "Log text")` per stage (`startUp: true` on the first, `end: StageEnd.CompleteQuest`
+   on the last), aliases with `Quests.ForcedAlias`, `FindAlias`, `CreatedAlias` or `LocationAlias` (records passed as
+   `record.ToLink()`), `Quests.Objective(mod, q, 10, "Text", [alias])`, and optionally
+   `Quests.Scene(mod, q, "MM_Scene", aliasA, aliasB, [new SceneLine(0, "Hi."), new SceneLine(1, "Hello.")])`.
+   Link stages with `var f = Quests.Fragments(q).ShowObjective(10, 10).CompleteQuest(20); f.Apply();`, write
+   `f.Source()` to `Scripts\Source\` + `f.SourcePath`, and compile it with the mod's other Papyrus scripts (the
+   `.pex` ships in `Scripts\Fragments\Quests\`). Without that `.pex`, `sf-mod-check check` reports the script
+   missing and the stages do nothing. README.md, "Quests", has a full example.
 
 ## 6. Inputs, outputs, exit codes, log
 
@@ -86,6 +96,9 @@ installed, the line is replaced by the check's own `gap check:` output ending in
 
 - Never changes or deletes game files or masters; it only reads them.
 - Makes no network calls and uploads nothing (PRIVACY.md).
-- Writes only the plugin you ask for. It doesn't pack BA2 archives, compile Papyrus or make zips.
+- Writes only the plugin you ask for. It doesn't pack BA2 archives, compile Papyrus or make zips. `Quests.Fragments`
+  returns the fragment script's source as text; your builder writes and compiles it.
+- Quest scenes have no voice or lip files and use only dialogue actions. Quests built with the helpers pass
+  `sf-mod-check gap` and `check` but have not yet been tested in game.
 - Mutagen 0.54.4 only. A newer Mutagen needs a new BuildKit release.
 - Call `PluginWriter.Write` from one thread at a time; don't write several plugins in parallel in one process.

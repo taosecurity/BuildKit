@@ -39,7 +39,7 @@ public sealed class WriteOptions
     /// BUILDKIT_SFMODCHECK variable, else the first sf-mod-check on PATH). If it can't be found, one line on stderr
     /// says so and names the fix; the build still succeeds.</summary>
     public bool GapCheck { get; init; } = true;
-    /// <summary>Full path of the sf-mod-check exe, if it isn't on PATH and BUILDKIT_SFMODCHECK isn't set.</summary>
+    /// <summary>Full path of the sf-mod-check exe, if it isn't on PATH and BUILDKIT_SFMODCHECK isn't set. Blank counts as not set.</summary>
     public string? GapCheckExe { get; init; }
     /// <summary>Extra folder the gap check looks in for masters before the Data folder (for example the build output).</summary>
     public string? GapCheckMastersDir { get; init; }
@@ -243,13 +243,14 @@ public static class PluginWriter
     public static string? ResolveSfModCheck(string? exe, string optionName = "exe")
     {
         var source = optionName;
+        static string? Clean(string? s) => s?.Trim().Trim('"').Trim() is { Length: > 0 } c ? c : null;
+        exe = Clean(exe);   // a blank (or "") exe counts as not set, like a blank variable
         if (exe == null)
         {
-            var env = Environment.GetEnvironmentVariable(GapCheckExeVariable);
-            if (string.IsNullOrWhiteSpace(env)) return FindSfModCheck();
+            var env = Clean(Environment.GetEnvironmentVariable(GapCheckExeVariable));
+            if (env == null) return FindSfModCheck();
             (exe, source) = (env, GapCheckExeVariable);
         }
-        exe = exe.Trim().Trim('"').Trim();
         if (Path.GetExtension(exe).Equals(".py", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException($"{source} names the Python script {exe}: BuildKit 0.5.0 runs {GapCheckExeName} instead; name its exe");
         if (!Path.IsPathFullyQualified(exe))
