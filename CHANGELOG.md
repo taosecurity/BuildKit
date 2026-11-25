@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.1 (unreleased)
+
+### What's new
+
+Two fixes, no change to the API. The README's "More examples" section is back: the 0.6.0 README rewrite dropped it by mistake. It holds three worked examples, "An add-on for another author's mod", "A magic effect and a spell" and "A script on the player alias of a quest", under the same headings as before, so old links to them work again. The message printed when `sf-mod-check` is not found (and the README and AGENTS.md) now says `dotnet tool install -g sf-mod-check`, with the releases page as the second way.
+
+### Example
+
+The three restored examples were built as they stand in the README against the Steam copy of Starfield.esm, with a made-up `AuthorsMod.esm` standing in for the other author's plugin. Each wrote its plugin without an error. The effect example printed:
+
+      BuildKit: EFIF/MUID filled on 1 effect entries
+
+and the add-on example printed `ID lock: 2 records, 2 new, 0 moved back to their locked IDs (ids.lock.json)`. No example needed a change for 0.6.0.
+
+### Changes
+
+- README: "More examples" restored (three examples, checked against 0.6.0).
+- The sf-mod-check install hint (README, AGENTS.md and the `InstallHint` message) names `dotnet tool install -g sf-mod-check`.
+
 ## 0.6.0 (2026-11-25)
 
 ### What's new

@@ -27,7 +27,7 @@ In a new or existing .NET 9 (or later) console project:
 ```
 dotnet new console -n MyBuilder
 cd MyBuilder
-dotnet add package Taosecurity.Starfield.BuildKit --version 0.6.0
+dotnet add package Taosecurity.Starfield.BuildKit --version 0.6.1
 ```
 
 ## 4. Prove the install works
@@ -47,7 +47,7 @@ Console.WriteLine(File.Exists(Path.Combine("out", "MyMod.esm")) ? "OK" : "FAILED
 Then run `dotnet run`. It prints any `BuildKit:` lines, a "gap check: NOT RUN" line and `OK`; `out\MyMod.esm`
 exists. The "gap check: NOT RUN" line (on standard error) is expected when `sf-mod-check` isn't installed: the gap
 check runs the separate tool `sf-mod-check gap` (found by `WriteOptions.GapCheckExe`, the `BUILDKIT_SFMODCHECK`
-variable, or PATH; install it from github.com/taosecurity/sf-mod-check/releases, since it is not on nuget.org), and the plugin is written either way. With it
+variable, or PATH; install it with `dotnet tool install -g sf-mod-check`, or from github.com/taosecurity/sf-mod-check/releases), and the plugin is written either way. With it
 installed, the line is replaced by the check's own `gap check:` output ending in `RESULT: OK`. No game files are needed for this; a real builder points `GameData` at the game's Data folder.
 
 ## 5. Common tasks

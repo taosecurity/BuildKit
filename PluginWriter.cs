@@ -213,8 +213,8 @@ public static class PluginWriter
         return outPath;
     }
 
-    // sf-mod-check is not on nuget.org: both ways to install it start from its GitHub releases page.
-    const string InstallHint = "Get it from github.com/taosecurity/sf-mod-check/releases (unzip the exe and put its folder on PATH, or install the .nupkg as a .NET global tool)";
+    // sf-mod-check is on nuget.org since 0.18.0; its GitHub releases page is the second way.
+    const string InstallHint = "Install it with `dotnet tool install -g sf-mod-check`, or get the exe from github.com/taosecurity/sf-mod-check/releases (unzip it and put its folder on PATH)";
 
     /// <summary>Runs `sf-mod-check gap` on a plugin; prints its report and returns its exit code (0 ok, 1 errors,
     /// 2 could not check). exe = the full path of the sf-mod-check program (null = the BUILDKIT_SFMODCHECK variable, else

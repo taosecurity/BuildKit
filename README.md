@@ -275,9 +275,9 @@ BuildKit looks for sf-mod-check in this order:
   picked). On Windows only `sf-mod-check.exe` is found there.
 
 A path named by the option or the variable must be a full path to an existing program, or the build throws.
-`PluginWriter.GapCheck`, called on its own, uses the variable and PATH the same way. Get sf-mod-check from its
-[releases page](https://github.com/taosecurity/sf-mod-check/releases): unzip the stand-alone exe and put its folder on
-PATH, or install the `.nupkg` as a .NET global tool the way sf-mod-check's README shows (it is not on nuget.org).
+`PluginWriter.GapCheck`, called on its own, uses the variable and PATH the same way. Install sf-mod-check with
+`dotnet tool install -g sf-mod-check` (it is on nuget.org since 0.18.0), or get the stand-alone exe from its
+[releases page](https://github.com/taosecurity/sf-mod-check/releases), unzip it and put its folder on PATH.
 
 If it finds none, it prints one line on standard error naming the fix (`gap check: NOT RUN (sf-mod-check was not
 found). Install it ...`) and the build still succeeds, so a missing check is never silent. When it runs, BuildKit
@@ -291,6 +291,140 @@ A plugin lists its masters by file name. `GameData` refuses a plugin whose maste
 plain name such as `Starfield.esm` (a folder, a drive, a network path like `\\server\share\x.esm`, or `..`), with an
 `InvalidDataException` naming the plugin. Without this check, opening a crafted mod could make Windows contact
 another computer. `GameData.IsPlainPluginName` is public for builders that read master names themselves.
+
+## More examples
+
+The three builders below were each built with BuildKit 0.6.0 and Mutagen 0.54.4. They need the same `using` lines as the
+example above plus `using Mutagen.Bethesda.Plugins;`, and each starts with
+`var dataDir = @"C:\Program Files (x86)\Steam\steamapps\common\Starfield\Data";`. The names `AuthorsMod`, `AM_`, `AMA_`,
+`MH_` and `MQ_` are made up.
+
+### An add-on for another author's mod
+
+An add-on is a plugin of your own that lists the other author's plugin as a master and points at its records. It
+changes none of them, so it can't conflict with them. Put a copy of their plugin in a folder of your own (here
+`C:\Mods\AuthorsMod`), tell `GameData` about that folder, open their plugin after `Starfield.esm`, and look their records up
+by EditorID:
+
+```csharp
+using var game = new GameData(dataDir, extraDirs: [@"C:\Mods\AuthorsMod"]);   // folders searched before Data
+game.Open("Starfield.esm");
+game.Open("AuthorsMod.esm");                     // their plugin: read only, becomes a master
+
+var mod = Plugin.New("AuthorsModAddon.esm", PluginStyle.Light, "Your Name", "Authors Mod Add-on 0.1.0");
+var theirKeyword = game.Get<IKeywordGetter>("AM_WidgetKeyword");   // stops the build if it is missing
+var theirWidget = game.Get<IMiscItemGetter>("AM_Widget");
+
+// Your own records point at theirs; nothing of theirs is copied or changed.
+var gadget = mod.MiscItems.AddNew("AMA_Gadget");
+gadget.Name = "Gadget";
+gadget.Keywords = new();
+gadget.Keywords.Add(theirKeyword.ToLink());
+var bundle = mod.FormLists.AddNew("AMA_Bundle");
+bundle.Items.Add(theirWidget.ToLink<IStarfieldMajorRecordGetter>());
+bundle.Items.Add(gadget.ToLink<IStarfieldMajorRecordGetter>());
+
+Console.WriteLine(IdLock.Apply(mod, "ids.lock.json"));
+PluginWriter.Write(mod, "out", game, new WriteOptions { GapCheckMastersDir = @"C:\Mods\AuthorsMod" });
+```
+
+- `extraDirs` folders are searched before the Data folder, so the build works without installing their mod.
+  `GameData.Get` stops the build with a message such as `no record AM_Widget in ...` if their EditorID is missing, for example after they rename it.
+- Their plugin becomes a master of yours only because your records point into it. Players need both mods loaded, and
+  yours loaded after theirs.
+- `IdLock` locks the FormIDs of your own records only. Commit `ids.lock.json`.
+- `GapCheckMastersDir` tells `sf-mod-check gap` where to find their plugin, the same as `--masters-dir`.
+
+### A magic effect and a spell
+
+An effect on a spell is an `Effect` entry that points at a `MagicEffect` record. `Effects.New` makes the entry. Mutagen
+leaves out two fields of every new entry (EFIF and MUID), and without them the effect never applies in the game.
+`PluginWriter.Write` fills them while it writes when `FixEffects` is on, which is the default; the option is named
+here so you can see where it lives:
+
+```csharp
+using var game = new GameData(dataDir);
+game.Open("Starfield.esm");
+var mod = Plugin.New("MyHeal.esm", PluginStyle.Light, "Your Name", "My Heal 0.1.0");
+var health = game.Get<IActorValueInformationGetter>("Health");
+var eitherHand = game.Get<IEquipTypeGetter>("EitherHand");
+
+// The magic effect: restores Health, once cast on yourself.
+var regen = mod.MagicEffects.AddNew("MH_RegenEffect");
+regen.Name = "Slow Heal";
+regen.Archetype = new MagicEffectArchetype { Type = MagicEffectArchetype.TypeEnum.ValueModifier };
+regen.SecondActorValue.SetTo(health);            // the actor value a Value Modifier changes
+regen.CastType = CastType.FireAndForget;
+regen.TargetType = TargetType.Self;
+regen.Flags = MagicEffect.Flag.NoArea;
+
+// The spell that uses it: Effects.New(effect, magnitude, area, duration).
+var spell = mod.Spells.AddNew("MH_SlowHealSpell");
+spell.Name = "Slow Heal";
+spell.Type = Spell.SpellType.Spell;
+spell.CastType = CastType.FireAndForget;
+spell.TargetType = TargetType.Self;
+spell.EquipmentType.SetTo(eitherHand);
+spell.Effects.Add(Effects.New(regen.ToLink<IMagicEffectGetter>(), magnitude: 5, area: 0, duration: 10));
+
+// FixEffects (on by default) fills the missing EFIF and MUID in every effect entry while writing.
+PluginWriter.Write(mod, "out", game, new WriteOptions { FixEffects = true });
+```
+
+For a Value Modifier with a duration, the magnitude is the amount per second. The actor value the effect changes is
+`SecondActorValue`. The build prints `BuildKit: EFIF/MUID filled on 1 effect entries`. If you build effects outside
+`PluginWriter.Write`, call `Effects.Fix(spell.Effects)` or `Effects.FixAll(mod)` yourself.
+
+### A script on the player alias of a quest
+
+A quest alias is a named slot that points at a record. A script on an alias is stored in the quest's own script data
+(`QuestAdapter.Aliases`) as an entry that points at the quest and the alias ID. The player alias uses the `Player`
+NPC record as its unique actor, as the game's own quests do. `Quests.New` makes the quest shell, and the alias and its
+script use plain Mutagen objects:
+
+```csharp
+using var game = new GameData(dataDir);
+game.Open("Starfield.esm");
+var mod = Plugin.New("MyQuest.esm", PluginStyle.Light, "Your Name", "My Quest 0.1.0");
+var playerNpc = game.Get<INpcGetter>("Player");
+
+var quest = Quests.New(mod, "MQ_Quest");
+quest.Name = "My Quest";
+quest.Data = new QuestData { Flags = Quest.Flag.StartGameEnabled | Quest.Flag.StartsEnabled };
+
+// The player alias: alias ID 0, filled by the Player NPC, as the game's own quests do it.
+const int PlayerAliasId = 0;
+var playerAlias = new QuestReferenceAlias { ID = PlayerAliasId, Name = "Player", Flags = 0, ALFG = 0 };
+playerAlias.UniqueActor.SetTo(playerNpc);
+quest.Aliases!.Add(playerAlias);
+
+// The script on the alias (Papyrus: Scriptname MQ:PlayerAliasScript extends ReferenceAlias).
+var aliasScript = new ScriptEntry { Name = "MQ:PlayerAliasScript", Flags = ScriptEntry.Flag.Local };
+// aliasScript.Properties.Add(new ScriptObjectProperty { Name = "SomeProperty", Object = someRecord.ToLink<IStarfieldMajorRecordGetter>() });
+
+// An alias script is stored in the quest's script data: an entry that points at the quest and the alias ID.
+quest.VirtualMachineAdapter = new QuestAdapter
+{
+    Version = 6,
+    ObjectFormat = 2,
+    Aliases =
+    {
+        new QuestFragmentAlias
+        {
+            Property = new ScriptObjectProperty { Name = "", Object = quest.ToLink<IStarfieldMajorRecordGetter>(), Alias = PlayerAliasId },
+            Version = 6,
+            ObjectFormat = 2,
+            Scripts = { aliasScript },
+        },
+    },
+};
+
+PluginWriter.Write(mod, "out", game);
+```
+
+The script itself is Papyrus, compiled separately: `Scriptname MQ:PlayerAliasScript extends ReferenceAlias`. Its
+properties are listed on the `ScriptEntry`, with the same names as the `Property` lines in the `.psc`. The script on
+the quest itself goes in `QuestAdapter.Scripts` the same way.
 
 ## What BuildKit prints
 
