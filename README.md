@@ -392,9 +392,10 @@ var quest = Quests.New(mod, "MQ_Quest");
 quest.Name = "My Quest";
 quest.Data = new QuestData { Flags = Quest.Flag.StartGameEnabled | Quest.Flag.StartsEnabled };
 
-// The player alias: alias ID 0, filled by the Player NPC, as the game's own quests do it.
-const int PlayerAliasId = 0;
-var playerAlias = new QuestReferenceAlias { ID = PlayerAliasId, Name = "Player", Flags = 0, ALFG = 0 };
+// The player alias, filled by the Player NPC, as the game's own quests do it.
+// Quests.NextAliasId gives the next free alias ID (0 on a quest with no aliases yet).
+var playerAliasId = Quests.NextAliasId(quest);
+var playerAlias = new QuestReferenceAlias { ID = playerAliasId, Name = "Player", Flags = 0, ALFG = 0 };
 playerAlias.UniqueActor.SetTo(playerNpc);
 quest.Aliases!.Add(playerAlias);
 
@@ -403,28 +404,26 @@ var aliasScript = new ScriptEntry { Name = "MQ:PlayerAliasScript", Flags = Scrip
 // aliasScript.Properties.Add(new ScriptObjectProperty { Name = "SomeProperty", Object = someRecord.ToLink<IStarfieldMajorRecordGetter>() });
 
 // An alias script is stored in the quest's script data: an entry that points at the quest and the alias ID.
-quest.VirtualMachineAdapter = new QuestAdapter
+// ??= keeps script data the quest already has, such as the fragments from Quests.Fragments(...).Apply().
+var vmad = quest.VirtualMachineAdapter ??= new QuestAdapter();
+vmad.Version = 6;
+vmad.ObjectFormat = 2;
+vmad.ExtraBindDataVersion = 3;
+vmad.Aliases.Add(new QuestFragmentAlias
 {
+    Property = new ScriptObjectProperty { Name = "", Object = quest.ToLink<IStarfieldMajorRecordGetter>(), Alias = (short)playerAliasId },
     Version = 6,
     ObjectFormat = 2,
-    Aliases =
-    {
-        new QuestFragmentAlias
-        {
-            Property = new ScriptObjectProperty { Name = "", Object = quest.ToLink<IStarfieldMajorRecordGetter>(), Alias = PlayerAliasId },
-            Version = 6,
-            ObjectFormat = 2,
-            Scripts = { aliasScript },
-        },
-    },
-};
+    Scripts = { aliasScript },
+});
 
 PluginWriter.Write(mod, "out", game);
 ```
 
 The script itself is Papyrus, compiled separately: `Scriptname MQ:PlayerAliasScript extends ReferenceAlias`. Its
 properties are listed on the `ScriptEntry`, with the same names as the `Property` lines in the `.psc`. The script on
-the quest itself goes in `QuestAdapter.Scripts` the same way.
+the quest itself goes in `QuestAdapter.Scripts` the same way. The example works next to the `Quests` helpers above:
+an alias made by `Quests.ForcedAlias` and the others keeps its own ID, and fragments written by `Apply()` stay.
 
 ## What BuildKit prints
 

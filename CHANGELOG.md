@@ -12,11 +12,11 @@ The three restored examples were built as they stand in the README against the S
 
       BuildKit: EFIF/MUID filled on 1 effect entries
 
-and the add-on example printed `ID lock: 2 records, 2 new, 0 moved back to their locked IDs (ids.lock.json)`. No example needed a change for 0.6.0.
+and the add-on example printed `ID lock: 2 records, 2 new, 0 moved back to their locked IDs (ids.lock.json)`. All three plugins passed `sf-mod-check gap` with 0 errors and 0 warnings. The player-alias example changed in one way: it now takes the next free alias ID from `Quests.NextAliasId` and keeps any script data the quest already has, so it works next to the 0.6.0 `Quests` helpers (aliases and fragments made with them are kept).
 
 ### Changes
 
-- README: "More examples" restored (three examples, checked against 0.6.0).
+- README: "More examples" restored (three examples, checked against 0.6.0). The player-alias example uses `Quests.NextAliasId` and keeps the quest's existing script data.
 - The sf-mod-check install hint (README, AGENTS.md and the `InstallHint` message) names `dotnet tool install -g sf-mod-check`.
 
 ## 0.6.0 (2026-11-25)
