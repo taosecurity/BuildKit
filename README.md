@@ -172,7 +172,7 @@ weapon.Name = Localized.For(mod, "Laser", text: s => s.ToUpperInvariant());   //
 
 The `Quests` helpers (since 0.6.0) make a quest with stages, objectives, aliases and a simple two-actor scene,
 with the field order and fixed values the Creation Kit writes on vanilla quests. This made-up errand starts with the
-game, shows an objective that points at a note created inside a box, plays three lines between the box's alias and
+game, shows an objective that points at a note created inside a box, plays three lines between a placed actor and
 the nearest actor with a keyword, and completes when stage 20 is set:
 
 ```csharp
@@ -182,13 +182,14 @@ var s10 = Quests.Stage(mod, q, 10, log: "I was asked to find a note.");
 var s20 = Quests.Stage(mod, q, 20, log: "I found the note.", end: StageEnd.CompleteQuest);
 
 var box     = Quests.ForcedAlias(q, "Box", boxRef.ToLink());                     // a placed reference
+var giver   = Quests.ForcedAlias(q, "Giver", giverRef.ToLink());                 // a placed actor
 var speaker = Quests.FindAlias(q, "Speaker", speakerKeyword.ToLink(), actorsOnly: true, closest: true);
 var note    = Quests.CreatedAlias(q, "Note", noteItem.ToLink<IStarfieldMajorRecordGetter>(), box, inside: true);
 var place   = Quests.LocationAlias(q, "Place", location.ToLink(), optional: true);
 
 var find = Quests.Objective(mod, q, 10, "Find the note", [note]);               // the marker points at the note
 
-Quests.Scene(mod, q, "MM_Errand_Talk", box, speaker,
+Quests.Scene(mod, q, "MM_Errand_Talk", giver, speaker,
     [new SceneLine(0, "Have you seen a note?"), new SceneLine(1, "Look in the box."), new SceneLine(0, "Thanks.")],
     endStage: 10);                                                              // the scene sets stage 10 when it ends
 
@@ -210,11 +211,11 @@ File.WriteAllText(psc, f.Source());   // Scripts\Source\Fragments\Quests\QF_MM_E
   Compile it with your own scripts (`Starfield_Papyrus_Flags.flg`, the game's sources as imports) and ship the
   `.pex` in `Scripts\Fragments\Quests\` (loose or in your archive). Call `Apply()` after the last stage is added and before `IdLock.Apply`
   (IdLock replaces the quest with a copy, so a later `Apply()` would go to the old one). The script name holds the
-  quest's FormID at the time `Fragments` is called, so if a build shifts that ID, delete the old `QF_` files.
+  quest's FormID as it is before `IdLock` runs, so if a build shifts that ID, delete the old `QF_` files.
 - **Aliases** get the Creation Kit's numbering (one more than the highest alias ID). Pass records as
   `record.ToLink()`. `optional: true` lets the quest start when the alias can't be filled.
 - **Scenes** give each line its own phase, dialogue action and scene topic with one response. Actor 0 is the first
-  alias and 1 the second. The topics and responses are named `<scene>_Line01`, `<scene>_Line01_Info` and so on,
+  alias and 1 the second; both must be filled with actors (a container or other object can't speak). The topics and responses are named `<scene>_Line01`, `<scene>_Line01_Info` and so on,
   so `IdLock` keeps their FormIDs too. BuildKit writes no voice files or lip files, and the scene uses only
   dialogue actions.
 - Each helper throws on a mistake it can see, with a message that names the fix: a repeated stage, objective,
