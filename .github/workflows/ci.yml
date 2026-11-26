@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: 2026 Richard Bejtlich
 #
 # Builds and tests BuildKit on Windows and Linux, and checks that the NuGet package builds.
-# On a version tag (v0.1.0), also publishes the package to nuget.org (Trusted Publishing, no stored API key) and
-# makes a GitHub release with the .nupkg, the symbols package and their SHA-256 checksums.
+# On a version tag (v0.1.0), also makes a GitHub release (safe to rerun) with the .nupkg, the symbols package and
+# their SHA-256 checksums, and then publishes the package to nuget.org (Trusted Publishing, no stored API key).
 name: tests
 
 on:
@@ -64,18 +64,22 @@ jobs:
         run: |
           for f in *.nupkg *.snupkg; do sha256sum "$f" > "$f.sha256"; done
           sha256sum -c ./*.sha256
+      - name: Publish the GitHub release (safe to rerun)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -s release-notes.md || { echo "CHANGELOG.md section for ${GITHUB_REF_NAME#v} is empty"; exit 1; }
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" out/*.nupkg out/*.snupkg out/*.sha256 --clobber
+            gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md --draft=false
+          else
+            gh release create "$GITHUB_REF_NAME" out/*.nupkg out/*.snupkg out/*.sha256 \
+              --title "BuildKit ${GITHUB_REF_NAME#v}" --notes-file release-notes.md --verify-tag
+          fi
       - name: Log in to nuget.org (Trusted Publishing)
         id: nuget
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841   # v1, pinned to a commit (2026-11-16 security review)
         with:
           user: ${{ vars.NUGET_USER }}
-      - name: Push to nuget.org
-        run: dotnet nuget push "out/*.nupkg" --api-key "${{ steps.nuget.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json
-      - name: Publish the GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "$GITHUB_REF_NAME" out/*.nupkg out/*.snupkg out/*.sha256
-          --title "BuildKit ${GITHUB_REF_NAME#v}"
-          --notes-file release-notes.md
-          --verify-tag
+      - name: Push to nuget.org (after the GitHub release; a rerun skips what is already there)
+        run: dotnet nuget push "out/*.nupkg" --api-key "${{ steps.nuget.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
