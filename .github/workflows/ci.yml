@@ -71,10 +71,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           title="BuildKit ${GITHUB_REF_NAME#v}"
-          if out=$(gh release view "$GITHUB_REF_NAME" --json assets -q '.assets[].name' 2>&1); then
+          if assets=$(gh release view "$GITHUB_REF_NAME" --json assets -q '.assets[].name' 2>&1); then
             have=0; missing=0
             for f in out/*; do
-              if printf '%s\n' "$out" | grep -qxF "$(basename "$f")"; then have=$((have+1)); else missing=$((missing+1)); fi
+              if printf '%s\n' "$assets" | grep -qxF "$(basename "$f")"; then have=$((have+1)); else missing=$((missing+1)); fi
             done
             if [ "$missing" -gt 0 ] && [ "$have" -gt 0 ]; then
               echo "The release has $have of the files and lacks $missing. Fix it by hand; a rerun never replaces a published file."; exit 1
@@ -82,12 +82,16 @@ jobs:
             if [ "$missing" -gt 0 ]; then   # an earlier run made the release, then failed: upload everything, checksums last
               gh release upload "$GITHUB_REF_NAME" $(ls out/* | grep -v '\.sha256$')
               gh release upload "$GITHUB_REF_NAME" out/*.sha256
+            else   # every file is already published: nuget.org gets those same files, not this run's rebuild
+              rm -rf out
+              gh release download "$GITHUB_REF_NAME" -D out
+              (cd out && sha256sum -c ./*.sha256)
             fi
             gh release edit "$GITHUB_REF_NAME" --title "$title" --notes-file release-notes.md --draft=false
-          elif printf '%s' "$out" | grep -q 'release not found'; then
+          elif printf '%s' "$assets" | grep -q 'release not found'; then
             gh release create "$GITHUB_REF_NAME" out/* --title "$title" --notes-file release-notes.md --verify-tag
           else
-            echo "gh release view failed: $out"; exit 1
+            echo "gh release view failed: $assets"; exit 1
           fi
       - name: Log in to nuget.org (Trusted Publishing)
         id: nuget
