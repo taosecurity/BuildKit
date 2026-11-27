@@ -43,6 +43,8 @@ public class GameplayOptionsTests
         Assert.True(dbg.Data is BoolGameplayOptionData { Value1: false, Value2: false });
         Assert.Equal(GameplayOptions.DebugName, dbg.Name?.String);
         Assert.EndsWith(GameplayOptions.DefaultNote(false), dbg.Description?.String);
+        Assert.EndsWith("DISABLE</font>: Default value of this option.", dbg.Description?.String);
+        Assert.EndsWith("ENABLE</font>: Default value of this option.", GameplayOptions.Bool(mod, "OPT_Option_On", "On", "Does it.", true).Description?.String);
         Assert.True(dbg.FormKey.ID < grp.FormKey.ID);
         var leaf = Assert.IsType<GameplayOptionsGroupLeaf>(grp.Options);
         Assert.Equal(dbg.FormKey, leaf.GameplayOptions.Single().FormKey);

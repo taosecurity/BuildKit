@@ -15,9 +15,9 @@ public static class GameplayOptions
     // PlayStation. The two leading spaces indent the option under its group in the menu.
     public const string DebugName = "  Show Debug Messages (PC only)";
 
-    /// <summary>The line the game's own options end with: "ON/OFF: Default value of this option."</summary>
+    /// <summary>The line the option description ends with: "DISABLE: Default value of this option." (or ENABLE). It names the value row the game shows, the "DISABLE" and "ENABLE" rows BoolRows writes (before 0.6.2 it said OFF or ON, which the game never shows for these options).</summary>
     public static string DefaultNote(bool on) =>
-        $"\n\n<font color=\"#EDEDED\">{(on ? "ON" : "OFF")}</font>: Default value of this option.";
+        $"\n\n<font color=\"#EDEDED\">{(on ? "ENABLE" : "DISABLE")}</font>: Default value of this option.";
 
     /// <summary>An on/off option. The description gets the default-value line appended. key = a fixed FormID
     /// (otherwise the next free one); text = how to make the text (default: Localized.Text on a localized plugin,

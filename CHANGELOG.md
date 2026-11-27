@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.2 (2026-11-27)
+
+### What's new
+
+One fix. The last line of an on/off option's description now says DISABLE or ENABLE, the two values the game shows for the option, instead of OFF or ON. Before this, the option screen listed ENABLE and DISABLE while the description said "OFF: Default value of this option.", which did not match. The two value rows the Creation Kit writes are unchanged. No API change: `GameplayOptions.DefaultNote(bool)` keeps its name and signature, and `GameplayOptions.Bool` and `GameplayOptions.Debug` (which uses `Bool`) get the new line by themselves.
+
+### Example
+
+A debug option that is off by default, built with `GameplayOptions.Debug(mod, "OPT_Option_Debug", "Options' log lines on screen")`, now ends its description like this (the colored word is shown here in a font tag):
+
+      Shows Options' log lines on screen. ... PC only: Xbox and PlayStation can't show debug lines.
+
+      <font color="#EDEDED">DISABLE</font>: Default value of this option.
+
+An option that is on by default ends with `ENABLE</font>: Default value of this option.` The unit tests check both endings.
+
+### Changes
+
+- `GameplayOptions.DefaultNote` writes DISABLE or ENABLE (was OFF or ON), matching the value rows `BoolRows` writes. Rebuild a mod with 0.6.2 to get the new line.
+
 ## 0.6.1 (2026-11-25)
 
 ### What's new
