@@ -131,13 +131,15 @@ public class GameplayOptionsTests
         var mod = Plugin.New("LocCache.esm", PluginStyle.Light, "test", "test", localized: true);
         var a = GameplayOptions.Bool(mod, "OPT_A", "A", "Same text.", false, text: Translate);
         var b = GameplayOptions.Bool(mod, "OPT_B", "B", "Same text.", false, text: Translate);
-        Assert.Equal("Same text.", cache["Same text."].String);
+        Assert.True(cache["Same text."].TryLookup(Mutagen.Bethesda.Strings.Language.German, out var cachedGerman));
+        Assert.Equal("Same text.", cachedGerman);
         foreach (var o in new[] { a, b })
-        {
-            var d = o.Description!.String!;
-            Assert.EndsWith("DISABLE</font>: Default value of this option.", d);
-            Assert.Single(System.Text.RegularExpressions.Regex.Matches(d, "Default value of this option"));
-        }
+            foreach (var l in Localized.Languages)
+            {
+                Assert.True(o.Description!.TryLookup(l, out var d));
+                Assert.EndsWith("DISABLE</font>: Default value of this option.", d);
+                Assert.Single(System.Text.RegularExpressions.Regex.Matches(d!, "Default value of this option"));
+            }
     }
 
     [Fact]

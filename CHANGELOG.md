@@ -6,7 +6,7 @@
 
 This release fixes one thing and has one change that matters to builders who translate their text. The last line of an on/off option's description now says DISABLE or ENABLE, the two values the game shows for the option, instead of OFF or ON. Before this, the option screen listed ENABLE and DISABLE while the description said "OFF: Default value of this option.", which did not match. The two value rows the Creation Kit writes are unchanged. The debug option's sentence "Turn it on when reporting a problem." now reads "Set it to ENABLE when reporting a problem."
 
-The API names and signatures are the same. One behavior changed, and it matters if you pass a `text:` function to `GameplayOptions.Bool` or `GameplayOptions.Debug` (for example a translator that looks strings up by their English text). The function is now given the description alone. The fixed default-value line is added after it, in every language the function returns, so the function never sees that line. The line is always English, like the DISABLE and ENABLE value rows. BuildKit adds it to a copy, so the object your function returns is never changed (a translator that caches its results is safe), and a function that returns null now gets a clear ArgumentException. Before 0.6.2 the function was given the description plus the OFF or ON line, so a translator keyed on that whole text must now be keyed on the description alone.
+The API names and signatures are the same. One behavior changed, and it matters if you pass a `text:` function to `GameplayOptions.Bool` or `GameplayOptions.Debug` (for example a translator that looks strings up by their English text). The function is now given the description alone. The fixed default-value line is added after it, in every language the function returns, so the function never sees that line. The line is always English, like the DISABLE and ENABLE value rows. BuildKit adds it to a copy, so the object your function returns is never changed (a translator that caches its results is safe), and a function that returns null for an option's description now gets a clear ArgumentException. Before 0.6.2 the function was given the description plus the OFF or ON line, so a translator keyed on that whole text must now be keyed on the description alone.
 
 A mod rebuilt with 0.6.2 also differs from its 0.6.1 build in these description lines (and in the string tables of a localized plugin), so do not take that difference for a regression.
 
@@ -23,7 +23,7 @@ An option that is on by default ends with `ENABLE</font>: Default value of this 
 ### Changes
 
 - `GameplayOptions.DefaultNote` writes DISABLE or ENABLE (was OFF or ON), matching the value rows `BoolRows` writes. Rebuild a mod with 0.6.2 to get the new line.
-- The `text:` function of `Bool` and `Debug` is given the description without the default-value line, which is appended afterward, in English, to a copy of the text in every language it holds. A null result throws an ArgumentException.
+- The `text:` function of `Bool` and `Debug` is given the description without the default-value line, which is appended afterward, in English, to a copy of the text in every language it holds. A null description from the function throws an ArgumentException.
 - The debug option says "Set it to ENABLE when reporting a problem." (was "Turn it on").
 
 ## 0.6.1 (2026-11-25)

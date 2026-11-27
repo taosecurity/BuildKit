@@ -31,14 +31,8 @@ public static class GameplayOptions
         if (t == null)
             throw new ArgumentException("The text: function returned null for an option description; it must return a TranslatedString.");
         var copy = new TranslatedString(t.TargetLanguage);
-        var any = false;
         foreach (var (l, v) in t)
-        {
-            if (v == null) continue;
-            copy.Set(l, v + note);
-            any = true;
-        }
-        if (!any) copy.Set(t.TargetLanguage, note.TrimStart('\n'));
+            if (v != null) copy.Set(l, v + note);
         return copy;
     }
 
