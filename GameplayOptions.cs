@@ -19,6 +19,16 @@ public static class GameplayOptions
     public static string DefaultNote(bool on) =>
         $"\n\n<font color=\"#EDEDED\">{(on ? "ENABLE" : "DISABLE")}</font>: Default value of this option.";
 
+    /// <summary>Adds the fixed default-value line to the end of the text in every language it has. The builder's own
+    /// text function only ever sees the description itself, never the line, so a translator keyed on the
+    /// description works (since 0.6.2; before that the key was the description plus an OFF/ON line).</summary>
+    static TranslatedString WithNote(TranslatedString t, string note)
+    {
+        foreach (var l in Localized.Languages)
+            if (t.TryLookup(l, out var v) && v != null) t.Set(l, v + note);
+        return t;
+    }
+
     /// <summary>An on/off option. The description gets the default-value line appended. key = a fixed FormID
     /// (otherwise the next free one); text = how to make the text (default: Localized.Text on a localized plugin,
     /// plain text otherwise); formVersion null = leave as is.</summary>
@@ -29,7 +39,7 @@ public static class GameplayOptions
         o.EditorID = editorId;
         if (formVersion is { } fv) o.FormVersion = fv;
         o.Name = Localized.For(mod, name, text);
-        o.Description = Localized.For(mod, description + DefaultNote(defaultOn), text);
+        o.Description = WithNote(Localized.For(mod, description, text), DefaultNote(defaultOn));
         o.Data = new BoolGameplayOptionData { Value1 = defaultOn, Value2 = defaultOn };
         o.Rewards.Clear();
         o.Rewards.AddRange(BoolRows(mod));
@@ -54,7 +64,7 @@ public static class GameplayOptions
     public static GameplayOption Debug(StarfieldMod mod, string editorId, string shows,
         FormKey? key = null, Func<string, TranslatedString>? text = null, ushort? formVersion = Plugin.CkFormVersion) =>
         Bool(mod, editorId, DebugName,
-            $"Shows {shows}. Turn it on when reporting a problem. The lines always go to the Papyrus log when Papyrus logging is on. " +
+            $"Shows {shows}. Set it to ENABLE when reporting a problem. The lines always go to the Papyrus log when Papyrus logging is on. " +
             "PC only: Xbox and PlayStation can't show debug lines.",
             false, key, text, formVersion);
 

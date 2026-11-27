@@ -97,12 +97,29 @@ public class GameplayOptionsTests
         // A translator that knows only the mod's own strings must not be asked for DISABLE, ENABLE or "".
         var known = new Dictionary<string, string> { ["  Show Debug Messages (PC only)"] = "Debug" };
         TranslatedString Translate(string s) =>
-            known.TryGetValue(s, out var v) ? Localized.Text(v) : s.StartsWith("Shows ") ? Localized.Text(s) : throw new KeyNotFoundException(s);
+            known.TryGetValue(s, out var v) ? Localized.Text(v) : s.StartsWith("Shows ") && !s.Contains("Default value of this option") ? Localized.Text(s) : throw new KeyNotFoundException(s);
         var mod = Plugin.New("LocRows.esm", PluginStyle.Light, "test", "test", localized: true);
         var o = GameplayOptions.Debug(mod, "OPT_Option_Debug", "lines", text: Translate);
         Assert.Equal("Debug", o.Name!.String);
         Assert.Equal(["DISABLE", "ENABLE"], o.Rewards.Select(r => r.Name!.String));
         Assert.All(o.Rewards, r => Assert.Equal(Localized.Languages.Length, r.Name!.NumLanguages));
+    }
+
+    [Fact]
+    public void TheDefaultLineIsAppendedAfterTheTextFunctionInEveryLanguage()
+    {
+        var asked = new List<string>();
+        TranslatedString Translate(string s) { asked.Add(s); return Localized.Text(s); }
+        var mod = Plugin.New("LocNote.esm", PluginStyle.Light, "test", "test", localized: true);
+        var o = GameplayOptions.Debug(mod, "OPT_Option_Debug", "lines", text: Translate);
+        Assert.DoesNotContain(asked, a => a.Contains("Default value of this option"));
+        Assert.Equal(Localized.Languages.Length, o.Description!.NumLanguages);
+        foreach (var l in Localized.Languages)
+        {
+            Assert.True(o.Description.TryLookup(l, out var d));
+            Assert.EndsWith("DISABLE</font>: Default value of this option.", d);
+            Assert.Contains("Set it to ENABLE when reporting a problem.", d);
+        }
     }
 }
 
