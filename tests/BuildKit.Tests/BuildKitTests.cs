@@ -121,6 +121,33 @@ public class GameplayOptionsTests
             Assert.Contains("Set it to ENABLE when reporting a problem.", d);
         }
     }
+
+    [Fact]
+    public void ACachingTranslatorGetsTheLineOnceAndKeepsItsOwnText()
+    {
+        // A translator that hands back the same object for the same text (a cache) must not have it changed.
+        var cache = new Dictionary<string, TranslatedString>();
+        TranslatedString Translate(string s) => cache.TryGetValue(s, out var t) ? t : cache[s] = Localized.Text(s);
+        var mod = Plugin.New("LocCache.esm", PluginStyle.Light, "test", "test", localized: true);
+        var a = GameplayOptions.Bool(mod, "OPT_A", "A", "Same text.", false, text: Translate);
+        var b = GameplayOptions.Bool(mod, "OPT_B", "B", "Same text.", false, text: Translate);
+        Assert.Equal("Same text.", cache["Same text."].String);
+        foreach (var o in new[] { a, b })
+        {
+            var d = o.Description!.String!;
+            Assert.EndsWith("DISABLE</font>: Default value of this option.", d);
+            Assert.Single(System.Text.RegularExpressions.Regex.Matches(d, "Default value of this option"));
+        }
+    }
+
+    [Fact]
+    public void ATextFunctionThatReturnsNullGetsAClearError()
+    {
+        var mod = Plugin.New("LocNull.esm", PluginStyle.Light, "test", "test", localized: true);
+        var e = Assert.Throws<ArgumentException>(() =>
+            GameplayOptions.Bool(mod, "OPT_N", "N", "Unknown.", false, text: s => s == "N" ? Localized.Text("N") : null!));
+        Assert.Contains("text: function returned null", e.Message);
+    }
 }
 
 public class PluginTests

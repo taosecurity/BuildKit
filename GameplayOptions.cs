@@ -21,12 +21,25 @@ public static class GameplayOptions
 
     /// <summary>Adds the fixed default-value line to the end of the text in every language it has. The builder's own
     /// text function only ever sees the description itself, never the line, so a translator keyed on the
-    /// description works (since 0.6.2; before that the key was the description plus an OFF/ON line).</summary>
-    static TranslatedString WithNote(TranslatedString t, string note)
+    /// description works (since 0.6.2; before that the key was the description plus an OFF/ON line).
+    /// It makes a new TranslatedString and leaves the one it is given untouched, so a translator that caches its
+    /// results or hands one object to several records never gets the line added twice. Every language the text holds
+    /// gets the line, not only the nine in Localized.Languages. The line itself is always English, like the
+    /// DISABLE/ENABLE value rows.</summary>
+    static TranslatedString WithNote(TranslatedString? t, string note)
     {
-        foreach (var l in Localized.Languages)
-            if (t.TryLookup(l, out var v) && v != null) t.Set(l, v + note);
-        return t;
+        if (t == null)
+            throw new ArgumentException("The text: function returned null for an option description; it must return a TranslatedString.");
+        var copy = new TranslatedString(t.TargetLanguage);
+        var any = false;
+        foreach (var (l, v) in t)
+        {
+            if (v == null) continue;
+            copy.Set(l, v + note);
+            any = true;
+        }
+        if (!any) copy.Set(t.TargetLanguage, note.TrimStart('\n'));
+        return copy;
     }
 
     /// <summary>An on/off option. The description gets the default-value line appended. key = a fixed FormID
