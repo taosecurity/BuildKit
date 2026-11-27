@@ -67,7 +67,9 @@ installed, the line is replaced by the check's own `gap check:` output ending in
    literal `%` in message text (it starts a number slot; write "percent"). README.md, "On-screen text that works on
    Xbox and PlayStation", has the Papyrus side.
 6. Localized plugin: make it with `Plugin.New(..., localized: true)`. `Messages` and `GameplayOptions` then put
-   their text in all nine languages by default; pass `text:` only to change that. For the names and descriptions
+   their text in all nine languages by default; pass `text:` only to change that. An on/off option's DISABLE and
+   ENABLE rows and the last line of its description ("DISABLE: Default value of this option.") never go through
+   your function; that line is added after it, always in English. For the names and descriptions
    of your own records, use `Localized.For(mod, "Text")`: all nine languages on a localized plugin, plain text on
    any other, or your own function with `Localized.For(mod, "Text", text: myFunction)`.
 7. A quest: `var q = Quests.Basic(mod, "MM_Quest", "Name", startGameEnabled: true);`, then

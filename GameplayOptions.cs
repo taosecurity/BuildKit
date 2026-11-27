@@ -36,7 +36,8 @@ public static class GameplayOptions
         return copy;
     }
 
-    /// <summary>An on/off option. The description gets the default-value line appended. key = a fixed FormID
+    /// <summary>An on/off option. The description gets the default-value line appended after the text function, always
+    /// in English (the function never sees it). key = a fixed FormID
     /// (otherwise the next free one); text = how to make the text (default: Localized.Text on a localized plugin,
     /// plain text otherwise); formVersion null = leave as is.</summary>
     public static GameplayOption Bool(StarfieldMod mod, string editorId, string name, string description, bool defaultOn,

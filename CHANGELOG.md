@@ -4,11 +4,11 @@
 
 ### What's new
 
-This release fixes one thing and has one change that matters to builders who translate their text. The last line of an on/off option's description now says DISABLE or ENABLE, the two values the game shows for the option, instead of OFF or ON. Before this, the option screen listed ENABLE and DISABLE while the description said "OFF: Default value of this option.", which did not match. The two value rows the Creation Kit writes are unchanged. The debug option's sentence "Turn it on when reporting a problem." now reads "Set it to ENABLE when reporting a problem."
+This release fixes one mismatch, rewords one sentence and has one change that matters to builders who translate their text. The last line of an on/off option's description now says DISABLE or ENABLE, the two values the game shows for the option, instead of OFF or ON. Before this, the option screen listed ENABLE and DISABLE while the description said "OFF: Default value of this option.", which did not match. The two value rows the Creation Kit writes are unchanged. The debug option's sentence "Turn it on when reporting a problem." now reads "Set it to ENABLE when reporting a problem."
 
 The API names and signatures are the same. One behavior changed, and it matters if you pass a `text:` function to `GameplayOptions.Bool` or `GameplayOptions.Debug` (for example a translator that looks strings up by their English text). The function is now given the description alone. The fixed default-value line is added after it, in every language the function returns, so the function never sees that line. The line is always English, like the DISABLE and ENABLE value rows. BuildKit adds it to a copy, so the object your function returns is never changed (a translator that caches its results is safe), and a function that returns null for an option's description now gets a clear ArgumentException. Before 0.6.2 the function was given the description plus the OFF or ON line, so a translator keyed on that whole text must now be keyed on the description alone.
 
-A mod rebuilt with 0.6.2 also differs from its 0.6.1 build in these description lines (and in the string tables of a localized plugin), so do not take that difference for a regression.
+A mod rebuilt with 0.6.2 also differs from its 0.6.1 build in these description lines and, for a debug option, in the reworded sentence (and in the string tables of a localized plugin), so do not take that difference for a regression.
 
 ### Example
 
